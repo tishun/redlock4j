@@ -60,12 +60,12 @@ public class MultiLockTest {
 
     @Test
     void shouldRejectNullKeyList() {
-        assertThrows(IllegalArgumentException.class, () -> new MultiLock(null, drivers, testConfig));
+        assertThrows(IllegalArgumentException.class, () -> new MultiLock(null, drivers, testConfig, null));
     }
 
     @Test
     void shouldRejectEmptyKeyList() {
-        assertThrows(IllegalArgumentException.class, () -> new MultiLock(Arrays.asList(), drivers, testConfig));
+        assertThrows(IllegalArgumentException.class, () -> new MultiLock(Arrays.asList(), drivers, testConfig, null));
     }
 
     // ========== Acquisition ==========
@@ -76,8 +76,8 @@ public class MultiLockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        MultiLock lock = new MultiLock(Arrays.asList("key1", "key2", "key3"), drivers, testConfig);
-        boolean acquired = lock.tryLock(1, TimeUnit.SECONDS);
+        MultiLock lock = new MultiLock(Arrays.asList("key1", "key2", "key3"), drivers, testConfig, null);
+        boolean acquired = lock.tryLock(Duration.ofSeconds(1));
 
         assertTrue(acquired);
 
@@ -95,8 +95,8 @@ public class MultiLockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        MultiLock lock = new MultiLock(Arrays.asList("key1", "key2"), drivers, testConfig);
-        boolean acquired = lock.tryLock(100, TimeUnit.MILLISECONDS);
+        MultiLock lock = new MultiLock(Arrays.asList("key1", "key2"), drivers, testConfig, null);
+        boolean acquired = lock.tryLock(Duration.ofMillis(100));
 
         assertFalse(acquired);
 
@@ -113,8 +113,8 @@ public class MultiLockTest {
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
         // Pass keys in reverse order
-        MultiLock lock = new MultiLock(Arrays.asList("z", "a", "m"), drivers, testConfig);
-        lock.tryLock(1, TimeUnit.SECONDS);
+        MultiLock lock = new MultiLock(Arrays.asList("z", "a", "m"), drivers, testConfig, null);
+        lock.tryLock(Duration.ofSeconds(1));
 
         // Verify keys are acquired in sorted order: a, m, z
         org.mockito.InOrder order = inOrder(mockDriver1);
@@ -130,8 +130,8 @@ public class MultiLockTest {
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
         // Pass duplicate keys
-        MultiLock lock = new MultiLock(Arrays.asList("key1", "key1", "key2"), drivers, testConfig);
-        lock.tryLock(1, TimeUnit.SECONDS);
+        MultiLock lock = new MultiLock(Arrays.asList("key1", "key1", "key2"), drivers, testConfig, null);
+        lock.tryLock(Duration.ofSeconds(1));
 
         // Should only lock 2 unique keys
         verify(mockDriver1, times(2)).setIfNotExists(anyString(), anyString(), anyLong());
@@ -141,7 +141,7 @@ public class MultiLockTest {
 
     @Test
     void shouldThrowOnNewCondition() {
-        MultiLock lock = new MultiLock(Arrays.asList("key1"), drivers, testConfig);
+        MultiLock lock = new MultiLock(Arrays.asList("key1"), drivers, testConfig, null);
         assertThrows(UnsupportedOperationException.class, lock::newCondition);
     }
 }

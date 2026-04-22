@@ -6,12 +6,13 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 
@@ -19,12 +20,12 @@ import java.util.concurrent.locks.Lock;
  * A distributed fair lock implementation that ensures FIFO (First-In-First-Out) ordering for lock acquisition. This
  * lock uses Redis sorted sets to maintain a queue of waiters, ensuring that threads acquire the lock in the order they
  * requested it.
- * 
+ *
  * <p>
  * The fair lock provides stronger ordering guarantees than the standard Redlock but may have slightly lower throughput
  * due to the additional coordination required.
  * </p>
- * 
+ *
  * <p>
  * <b>Implementation Details:</b>
  * </p>
@@ -34,59 +35,39 @@ import java.util.concurrent.locks.Lock;
  * <li>Only the waiter with the lowest timestamp can acquire the lock</li>
  * <li>Automatic cleanup of expired waiters</li>
  * </ul>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
-public class FairLock implements Lock {
+public class FairLock extends AbstractRedlock implements Lock {
     private static final Logger logger = LoggerFactory.getLogger(FairLock.class);
 
     private final String lockKey;
     private final String queueKey;
-    private final List<RedisDriver> redisDrivers;
-    private final RedlockConfiguration config;
-    private final SecureRandom secureRandom;
 
     // Thread-local storage for lock state
     private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
 
-    private static class LockState {
-        final String lockValue;
+    private static class LockState extends BaseLockState {
         final String queueToken;
-        final long acquisitionTime;
-        final long validityTime;
-        int holdCount;
 
-        LockState(String lockValue, String queueToken, long acquisitionTime, long validityTime) {
-            this.lockValue = lockValue;
+        LockState(String lockValue, String queueToken, Instant acquisitionTime, Duration validityDuration) {
+            super(lockValue, acquisitionTime, validityDuration);
             this.queueToken = queueToken;
-            this.acquisitionTime = acquisitionTime;
-            this.validityTime = validityTime;
-            this.holdCount = 1;
-        }
-
-        boolean isValid() {
-            return System.currentTimeMillis() < acquisitionTime + validityTime;
-        }
-
-        void incrementHoldCount() {
-            holdCount++;
-        }
-
-        int decrementHoldCount() {
-            return --holdCount;
         }
     }
 
-    public FairLock(String lockKey, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
+    public FairLock(String lockKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+            LockWaitStrategy waitStrategy) {
+        super(redisDrivers, config, waitStrategy);
         this.lockKey = lockKey;
         this.queueKey = lockKey + ":queue";
-        this.redisDrivers = redisDrivers;
-        this.config = config;
-        this.secureRandom = new SecureRandom();
     }
 
     @Override
     public void lock() {
         try {
-            if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+            if (!tryLock(config.getLockAcquisitionTimeout())) {
                 throw new RedlockException("Failed to acquire fair lock within timeout: " + lockKey);
             }
         } catch (InterruptedException e) {
@@ -97,7 +78,7 @@ public class FairLock implements Lock {
 
     @Override
     public void lockInterruptibly() throws InterruptedException {
-        if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        if (!tryLock(config.getLockAcquisitionTimeout())) {
             throw new RedlockException("Failed to acquire fair lock within timeout: " + lockKey);
         }
     }
@@ -105,7 +86,7 @@ public class FairLock implements Lock {
     @Override
     public boolean tryLock() {
         try {
-            return tryLock(0, TimeUnit.MILLISECONDS);
+            return tryLock(Duration.ZERO);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
@@ -113,7 +94,7 @@ public class FairLock implements Lock {
     }
 
     @Override
-    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+    public boolean tryLock(Duration timeout) throws InterruptedException {
         // Check if current thread already holds the lock (reentrancy)
         LockState currentState = lockState.get();
         if (currentState != null && currentState.isValid()) {
@@ -122,19 +103,27 @@ public class FairLock implements Lock {
             return true;
         }
 
-        long timeoutMs = unit.toMillis(time);
-        long startTime = System.currentTimeMillis();
-        String queueToken = generateToken();
-        long timestamp = System.currentTimeMillis();
+        Instant deadline = Instant.now().plus(timeout);
+        String queueToken = generateLockValue();
+        long timestamp = System.currentTimeMillis(); // Redis ZADD requires numeric score
 
         try {
             // Add ourselves to the queue
             addToQueue(queueToken, timestamp);
 
-            for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
+            int attempt = 0;
+            while (true) {
                 if (Thread.currentThread().isInterrupted()) {
                     removeFromQueue(queueToken);
                     throw new InterruptedException();
+                }
+
+                // Check if we've exceeded the timeout
+                Duration remaining = Duration.between(Instant.now(), deadline);
+                if (!timeout.isZero() && remaining.isNegative()) {
+                    logger.debug("Fair lock acquisition timeout exceeded for {} after {} attempts", lockKey, attempt);
+                    removeFromQueue(queueToken);
+                    return false;
                 }
 
                 // Check if we're at the front of the queue
@@ -142,28 +131,27 @@ public class FairLock implements Lock {
                     // Try to acquire the lock
                     LockResult result = attemptLock();
                     if (result.isAcquired()) {
-                        lockState.set(new LockState(result.getLockValue(), queueToken, System.currentTimeMillis(),
-                                result.getValidityTimeMs()));
+                        lockState.set(new LockState(result.getLockValue(), queueToken, Instant.now(),
+                                Duration.ofMillis(result.getValidityTimeMs())));
                         logger.debug("Successfully acquired fair lock {} on attempt {}", lockKey, attempt + 1);
                         return true;
                     }
                 }
 
-                // Check if we've exceeded the timeout
-                if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
-                    logger.debug("Fair lock acquisition timeout exceeded for {}", lockKey);
+                // For zero timeout (tryLock()), only try once
+                if (timeout.isZero()) {
+                    logger.debug("Fair lock {} not available for immediate acquisition", lockKey);
                     removeFromQueue(queueToken);
-                    break;
+                    return false;
                 }
 
                 // Wait before retrying
-                if (attempt < config.getMaxRetryAttempts()) {
-                    Thread.sleep(config.getRetryDelayMs());
+                remaining = Duration.between(Instant.now(), deadline);
+                if (!remaining.isNegative()) {
+                    waitForLockRelease(lockKey, remaining.toMillis());
                 }
+                attempt++;
             }
-
-            removeFromQueue(queueToken);
-            return false;
         } catch (InterruptedException e) {
             removeFromQueue(queueToken);
             throw e;
@@ -199,74 +187,70 @@ public class FairLock implements Lock {
         logger.debug("Successfully released fair lock {}", lockKey);
     }
 
+    @Override
+    public Condition newCondition() {
+        throw new UnsupportedOperationException("Conditions are not supported by distributed fair locks");
+    }
+
     /**
      * Adds a token to the queue with the given timestamp. Uses Redis sorted sets (ZADD) to maintain FIFO ordering.
      */
     private void addToQueue(String token, long timestamp) {
-        int successfulNodes = 0;
-
-        for (RedisDriver driver : redisDrivers) {
+        // Use execution strategy to add to queue on appropriate nodes
+        int successfulNodes = executionStrategy.executeOnNodes(driver -> {
             try {
-                // Add to sorted set with timestamp as score
-                if (driver.zAdd(queueKey, timestamp, token)) {
-                    successfulNodes++;
-                }
+                return driver.zAdd(queueKey, timestamp, token);
             } catch (Exception e) {
                 logger.debug("Failed to add to queue on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
             }
-        }
+        });
 
         // Clean up expired entries (older than lock timeout)
-        long expirationThreshold = System.currentTimeMillis() - config.getDefaultLockTimeoutMs() * 2;
-        cleanupExpiredQueueEntries(expirationThreshold);
+        Duration expirationAge = config.getDefaultLockTimeout().multipliedBy(2);
+        Instant expirationThreshold = Instant.now().minus(expirationAge);
+        cleanupExpiredQueueEntries(expirationThreshold.toEpochMilli());
 
-        logger.debug("Added token {} to queue {} with timestamp {} on {}/{} nodes", token, queueKey, timestamp,
-                successfulNodes, redisDrivers.size());
+        logger.debug("Added token {} to queue {} with timestamp {} on {} nodes", token, queueKey, timestamp,
+                successfulNodes);
     }
 
     /**
      * Removes a token from the queue. Uses Redis sorted sets (ZREM) to remove the token.
      */
     private void removeFromQueue(String token) {
-        int successfulNodes = 0;
-
-        for (RedisDriver driver : redisDrivers) {
+        // Use execution strategy to remove from queue on appropriate nodes
+        int successfulNodes = executionStrategy.executeOnNodes(driver -> {
             try {
-                if (driver.zRem(queueKey, token)) {
-                    successfulNodes++;
-                }
+                return driver.zRem(queueKey, token);
             } catch (Exception e) {
                 logger.debug("Failed to remove from queue on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
             }
-        }
+        });
 
-        logger.debug("Removed token {} from queue {} on {}/{} nodes", token, queueKey, successfulNodes,
-                redisDrivers.size());
+        logger.debug("Removed token {} from queue {} on {} nodes", token, queueKey, successfulNodes);
     }
 
     /**
      * Checks if the given token is at the front of the queue. Uses Redis sorted sets (ZRANGE) to get the first element.
      */
     private boolean isAtFrontOfQueue(String token) {
-        int votesForFront = 0;
-
-        for (RedisDriver driver : redisDrivers) {
+        // Use execution strategy to check if token is at front on appropriate nodes
+        int votesForFront = executionStrategy.executeOnNodes(driver -> {
             try {
                 // Get the first element in the sorted set (lowest score/timestamp)
                 List<String> firstElements = driver.zRange(queueKey, 0, 0);
-
-                if (!firstElements.isEmpty() && token.equals(firstElements.get(0))) {
-                    votesForFront++;
-                }
+                return !firstElements.isEmpty() && token.equals(firstElements.get(0));
             } catch (Exception e) {
                 logger.debug("Failed to check queue position on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
             }
-        }
+        });
 
-        // Require quorum agreement that we're at the front
-        boolean atFront = votesForFront >= config.getQuorum();
-        logger.debug("Token {} is {} at front of queue (votes: {}/{})", token, atFront ? "" : "NOT", votesForFront,
-                redisDrivers.size());
+        // Use strategy to determine if we have enough votes
+        boolean atFront = executionStrategy.isSuccessful(votesForFront);
+        logger.debug("Token {} is {} at front of queue (votes: {})", token, atFront ? "" : "NOT", votesForFront);
 
         return atFront;
     }
@@ -275,89 +259,47 @@ public class FairLock implements Lock {
      * Cleans up expired entries from the queue. Removes entries with timestamps older than the threshold.
      */
     private void cleanupExpiredQueueEntries(long expirationThreshold) {
-        for (RedisDriver driver : redisDrivers) {
+        // Use execution strategy to cleanup on appropriate nodes
+        executionStrategy.executeOnNodes(driver -> {
             try {
                 // Remove all entries with score (timestamp) less than threshold
                 long removed = driver.zRemRangeByScore(queueKey, 0, expirationThreshold);
                 if (removed > 0) {
                     logger.debug("Cleaned up {} expired queue entries on {}", removed, driver.getIdentifier());
                 }
+                return true;
             } catch (Exception e) {
                 logger.debug("Failed to cleanup queue on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
             }
-        }
+        });
     }
 
     private LockResult attemptLock() {
-        String lockValue = generateToken();
-        long startTime = System.currentTimeMillis();
-        int successfulNodes = 0;
-
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                if (driver.setIfNotExists(lockKey, lockValue, config.getDefaultLockTimeoutMs())) {
-                    successfulNodes++;
-                }
-            } catch (Exception e) {
-                logger.debug("Failed to acquire lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
-
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-        long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
-
-        boolean acquired = successfulNodes >= config.getQuorum() && validityTime > 0;
-
-        if (!acquired) {
-            releaseLock(lockValue);
-        }
-
-        return new LockResult(acquired, validityTime, lockValue, successfulNodes, redisDrivers.size());
+        String lockValue = generateLockValue();
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        return executionStrategy.acquireLock(lockKey, lockValue, config.getDefaultLockTimeout().toMillis());
     }
 
     private void releaseLock(String lockValue) {
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                driver.deleteIfValueMatches(lockKey, lockValue);
-            } catch (Exception e) {
-                logger.warn("Failed to release lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
-    }
-
-    private String generateToken() {
-        byte[] bytes = new byte[20];
-        secureRandom.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public Condition newCondition() {
-        throw new UnsupportedOperationException("Conditions are not supported by distributed fair locks");
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        executionStrategy.releaseLock(lockKey, lockValue);
     }
 
     /**
      * Checks if the current thread holds this lock.
      */
     public boolean isHeldByCurrentThread() {
-        LockState state = lockState.get();
-        return state != null && state.isValid();
+        return isLockStateValid(lockState.get());
     }
 
     /**
      * Gets the remaining validity time of the lock.
+     *
+     * @return remaining validity time, or {@link Duration#ZERO} if not held or expired
      */
-    public long getRemainingValidityTime() {
-        LockState state = lockState.get();
-        if (state == null || !state.isValid()) {
-            return 0;
-        }
-        return (state.acquisitionTime + state.validityTime) - System.currentTimeMillis();
+    public Duration getRemainingValidityTime() {
+        return Duration.ofMillis(calculateRemainingValidityTime(lockState.get()));
     }
 
     /**
@@ -365,6 +307,6 @@ public class FairLock implements Lock {
      */
     public int getHoldCount() {
         LockState state = lockState.get();
-        return state != null ? state.holdCount : 0;
+        return isLockStateValid(state) ? state.getHoldCount() : 0;
     }
 }

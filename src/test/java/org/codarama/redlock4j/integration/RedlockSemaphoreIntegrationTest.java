@@ -104,7 +104,7 @@ public class RedlockSemaphoreIntegrationTest {
     void tryAcquireShouldReturnTrueWhenPermitAvailable() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
             RedlockSemaphore semaphore = manager.createSemaphore("try-acquire", 2);
-            assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+            assertTrue(semaphore.tryAcquire(Duration.ofSeconds(1)));
             semaphore.release();
         }
     }
@@ -113,12 +113,12 @@ public class RedlockSemaphoreIntegrationTest {
     void sameThreadCannotAcquireMultipleTimes() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
             RedlockSemaphore semaphore = manager.createSemaphore("same-thread", 5);
-            assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+            assertTrue(semaphore.tryAcquire(Duration.ofSeconds(1)));
             // Same thread should fail to acquire again while holding
-            assertFalse(semaphore.tryAcquire(500, TimeUnit.MILLISECONDS));
+            assertFalse(semaphore.tryAcquire(Duration.ofMillis(500)));
             semaphore.release();
             // After release, can acquire again
-            assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+            assertTrue(semaphore.tryAcquire(Duration.ofSeconds(1)));
             semaphore.release();
         }
     }
@@ -138,7 +138,7 @@ public class RedlockSemaphoreIntegrationTest {
     void shouldRejectAcquiringMorePermitsThanMax() {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
             RedlockSemaphore semaphore = manager.createSemaphore("exceed-max", 3);
-            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(5, 1, TimeUnit.SECONDS));
+            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(5, Duration.ofSeconds(1)));
         }
     }
 
@@ -146,7 +146,7 @@ public class RedlockSemaphoreIntegrationTest {
     void shouldRejectAcquiringZeroPermits() {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
             RedlockSemaphore semaphore = manager.createSemaphore("zero-acquire", 3);
-            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(0, 1, TimeUnit.SECONDS));
+            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(0, Duration.ofSeconds(1)));
         }
     }
 
@@ -167,7 +167,7 @@ public class RedlockSemaphoreIntegrationTest {
                 executor.submit(() -> {
                     try {
                         startSignal.await();
-                        if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                        if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
                             try {
                                 successCount.incrementAndGet();
                                 Thread.sleep(100);
@@ -205,7 +205,7 @@ public class RedlockSemaphoreIntegrationTest {
                 executor.submit(() -> {
                     try {
                         for (int j = 0; j < cycles; j++) {
-                            if (semaphore.tryAcquire(2, TimeUnit.SECONDS)) {
+                            if (semaphore.tryAcquire(Duration.ofSeconds(2))) {
                                 totalAcquisitions.incrementAndGet();
                                 Thread.sleep(20);
                                 semaphore.release();
@@ -239,7 +239,7 @@ public class RedlockSemaphoreIntegrationTest {
             for (int i = 0; i < threadCount; i++) {
                 new Thread(() -> {
                     try {
-                        if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                        if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
                             acquired.incrementAndGet();
                             allAcquired.countDown();
                             releaseSignal.await();
@@ -267,7 +267,7 @@ public class RedlockSemaphoreIntegrationTest {
     void shouldWorkWithLettuceDriver() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
             RedlockSemaphore semaphore = manager.createSemaphore("lettuce-sem", 3);
-            assertTrue(semaphore.tryAcquire(2, TimeUnit.SECONDS));
+            assertTrue(semaphore.tryAcquire(Duration.ofSeconds(2)));
             semaphore.release();
         }
     }
@@ -285,7 +285,7 @@ public class RedlockSemaphoreIntegrationTest {
             for (int i = 0; i < threadCount; i++) {
                 executor.submit(() -> {
                     try {
-                        if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                        if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
                             try {
                                 successCount.incrementAndGet();
                                 Thread.sleep(100);

@@ -1,4 +1,9 @@
-# Redlock4j
+<p align="center"> 
+
+![sample SVG image](docs/logo-large.svg) 
+
+</p>
+
 
 [![CI](https://github.com/Codarama/redlock4j/actions/workflows/ci.yml/badge.svg)](https://github.com/Codarama/redlock4j/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/org.codarama/redlock4j?versionSuffix=RELEASE)](https://maven-badges.herokuapp.com/maven-central/org.codarama/redlock4j)
@@ -12,19 +17,19 @@ A simple and lightweight Java implementation of the [Redlock distributed locking
 
 ## Features
 
-- **Pure [Redlock distributed locking algorithm](https://redis.io/docs/latest/develop/use/patterns/distributed-locks/)** - Implementation based entirely on the Redlock algorithm as described by Redis.
-- **Multiple Redis Drivers**: Integrated supports for [Jedis](https://github.com/redis/jedis) and [Lettuce](https://github.com/redis/lettuce), extensible to other drivers
-- **Lightweight** - Minimum implementation, no extra scope outside locking
-- **Multi-interface API** - Supports standard `java.util.concurrent.locks.Lock` interface, as well as async and reactive APIs
-- **Advanced Locking Primitives**: Fair locks, multi-locks, read-write locks, semaphores, and countdown latches
-- **Lock Extension**: Extend lock validity time without releasing and re-acquiring
-- **Atomic CAS/CAD Detection**: Auto-detects and uses native [Redis 8.4+ CAS/CAD commands](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.4-release-notes/) when available
+- **Flexible Deployment** - Works as a [full Redlock implementation](https://redlock4j.codarama.org/guide/configuration/#single-node-mode) with multiple Redis nodes for high availability, or as a [standalone distributed lock](https://redlock4j.codarama.org/guide/configuration/#single-node-mode) with a single Redis node
+- **Multiple Redis Drivers** - Integrated support for [Jedis](https://github.com/redis/jedis) and [Lettuce](https://github.com/redis/lettuce), extensible to other drivers
+- **[Keyspace Notifications](https://redis.io/docs/latest/develop/use/keyspace-notifications/)** - Uses Redis pub/sub for instant lock release detection (20-50x faster than polling under contention)
+- **Multi-interface API** - Supports standard `java.util.concurrent.locks.Lock` interface, as well as [async](https://redlock4j.codarama.org/guide/async-reactive/) and [reactive](https://redlock4j.codarama.org/guide/async-reactive/) APIs
+- **Advanced Locking Primitives** - [Fair locks](https://redlock4j.codarama.org/guide/lock-types/#fair-lock), [multi-locks](https://redlock4j.codarama.org/guide/lock-types/#multi-lock), [read-write locks](https://redlock4j.codarama.org/guide/lock-types/#read-write-lock), [semaphores](https://redlock4j.codarama.org/guide/lock-types/#semaphore), and [countdown latches](https://redlock4j.codarama.org/guide/lock-types/#countdown-latch)
+- **Lock Extension** - Extend lock validity time without releasing and re-acquiring
+- **Atomic CAS/CAD Detection** - Auto-detects and uses native [Redis 8.4+ CAS/CAD commands](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.4-release-notes/) when available
 - **Java 8+** - Compatible with Java 8 and higher, tested against Java 8, 11, 17, and 21
 
 ## Requirements
 
 - Java 8 or higher
-- At least 3 Redis instances for proper Redlock operation
+- At least 1 Redis instance (3+ recommended for full Redlock high-availability guarantees)
 
 ## Guide
 
@@ -48,13 +53,13 @@ Add this library and your preferred Redis client to your `pom.xml`:
 <dependency>
     <groupId>redis.clients</groupId>
     <artifactId>jedis</artifactId>
-    <version>5.1.0</version>
+    <version>7.4.1</version>
 </dependency>
 <!-- OR -->
 <dependency>
     <groupId>io.lettuce</groupId>
     <artifactId>lettuce-core</artifactId>
-    <version>6.7.1.RELEASE</version>
+    <version>7.5.1.RELEASE</version>
 </dependency>
 ```
 
@@ -119,7 +124,7 @@ try {
 }
 
 // Try lock with timeout
-if (lock.tryLock(5, TimeUnit.SECONDS)) {
+if (lock.tryLock(Duration.ofSeconds(5))) {
     try {
         // Critical section
         performCriticalWork();
@@ -203,7 +208,7 @@ Semaphores control concurrent access with a configurable number of permits.
 // Create a semaphore with 5 permits
 RedlockSemaphore semaphore = redlockManager.createSemaphore("api-limiter", 5);
 
-if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
     try {
         // One of 5 concurrent slots
         callRateLimitedAPI();
@@ -298,8 +303,8 @@ stateObservable.subscribe(state -> System.out.println("Lock state: " + state));
 ### Combined Async/Reactive Lock
 
 ```java
-// Lock implementing both AsyncRedlock and AsyncRedlockImpl interfaces
-AsyncRxRedlock combinedLock = redlockManager.createAsyncRxLock("combined-resource");
+// Lock implementing both AsyncRedlock and RxRedlock interfaces
+AsyncRedlockImpl combinedLock = redlockManager.createAsyncRxLock("combined-resource");
 
 // Use CompletionStage interface for acquisition
 combinedLock.tryLockAsync()
@@ -325,6 +330,31 @@ combinedLock.tryLockAsync()
 | `maxRetryAttempts` | 3 | Maximum number of retry attempts |
 | `clockDriftFactor` | 0.01 | Factor to account for clock drift between nodes |
 | `lockAcquisitionTimeout` | 10 seconds | Maximum time to wait when calling `lock()` |
+| `waitStrategy` | KEYSPACE_NOTIFICATIONS | Strategy for waiting on contended locks |
+
+### Wait Strategy
+
+Redlock4j uses **keyspace notifications** by default for waiting on contended locks. This provides instant notification when a lock is released (1-5ms latency vs 50-100ms with polling).
+
+```java
+// Default: Keyspace notifications (recommended)
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .build();
+
+// Fallback: Polling (for restricted environments)
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .usePolling()  // Use polling instead of keyspace notifications
+    .build();
+```
+
+**Requirements for keyspace notifications:**
+- RESP3 protocol (Lettuce 6+, Jedis 5+) - automatically used by redlock4j
+- Redis 6.0+ (recommended)
+- Auto-configures Redis with: `CONFIG SET notify-keyspace-events "Kgx"`
+
+See the [Architecture Guide](https://redlock4j.codarama.org/guide/architecture/) for more details.
 
 ### RedisNodeConfiguration
 
@@ -425,7 +455,7 @@ rxLock.tryLockRx()
 
 **Important:** Lock extension is for efficiency, not correctness. It does not solve GC pause problems. For true correctness, use fencing tokens. See [Lock Extension Documentation](docs/LOCK-EXTENSION.md) for details.
 
-## How It Works
+## How Redlock Works
 
 This implementation follows the Redlock algorithm as specified by Redis. The diagram below illustrates the complete flow:
 
@@ -490,43 +520,7 @@ sequenceDiagram
 - Multiple threads can safely use the same `Redlock` instance
 - Lock state is automatically cleaned up when locks are released
 
-## Error Handling
-
-- `RedlockException`: Thrown for lock-related errors
-- `RedisDriverException`: Thrown for Redis communication errors
-- Automatic retry with exponential backoff and jitter
-- Graceful degradation when Redis nodes are unavailable
-
-## Best Practices
-
-1. **Use at least 3 Redis nodes** for proper fault tolerance
-2. **Set appropriate timeouts** based on your use case
-3. **Always use try-finally blocks** to ensure locks are released
-4. **Monitor Redis node health** and connection status
-5. **Consider lock validity time** for long-running operations
 6. **Use unique lock keys** to avoid conflicts between different resources
-
-## Releases and Maven Central
-
-Redlock4j is automatically published to Maven Central when new GitHub releases are created.
-
-### Latest Release
-
-The latest stable version is available on Maven Central:
-
-**Maven:**
-```xml
-<dependency>
-    <groupId>org.codarama</groupId>
-    <artifactId>redlock4j</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-**Gradle:**
-```gradle
-implementation 'org.codarama:redlock4j:1.0.0'
-```
 
 ### Related Documentation
 - [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html) by Martin Kleppmann

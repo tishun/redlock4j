@@ -7,8 +7,13 @@ package org.codarama.redlock4j.driver;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.SetArgs;
+import io.lettuce.core.StatefulRedisConnectionImpl;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
+import io.lettuce.core.codec.StringCodec;
+import io.lettuce.core.protocol.CommandArgs;
+import io.lettuce.core.protocol.CommandType;
+import io.lettuce.core.protocol.ProtocolVersion;
 import io.lettuce.core.pubsub.RedisPubSubAdapter;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import io.lettuce.core.pubsub.api.sync.RedisPubSubCommands;
@@ -18,7 +23,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+
+import static io.lettuce.core.CompareCondition.valueEq;
 
 /**
  * Lettuce implementation of the RedisDriver interface with automatic CAS/CAD detection.
@@ -31,6 +38,9 @@ import java.util.Set;
  * </ul>
  * Detection happens once at driver initialization.
  * </p>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class LettuceRedisDriver implements RedisDriver {
     private static final Logger logger = LoggerFactory.getLogger(LettuceRedisDriver.class);
@@ -108,10 +118,8 @@ public class LettuceRedisDriver implements RedisDriver {
         try {
             // Try to execute DELEX on a test key
             String testKey = "__redlock4j_cad_test__" + System.currentTimeMillis();
-            commands.dispatch(io.lettuce.core.protocol.CommandType.DELEX,
-                    new io.lettuce.core.output.IntegerOutput<>(io.lettuce.core.codec.StringCodec.UTF8),
-                    new io.lettuce.core.protocol.CommandArgs<>(io.lettuce.core.codec.StringCodec.UTF8).addKey(testKey)
-                            .add("IFEQ").add("test_value"));
+            commands.dispatch(CommandType.DELEX, new io.lettuce.core.output.IntegerOutput<>(StringCodec.UTF8),
+                    new CommandArgs<>(StringCodec.UTF8).addKey(testKey).add("IFEQ").add("test_value"));
             logger.debug("Native CAS/CAD commands detected for {}", identifier);
             return CADStrategy.NATIVE;
         } catch (Exception e) {
@@ -149,10 +157,9 @@ public class LettuceRedisDriver implements RedisDriver {
      */
     private boolean deleteIfValueMatchesNative(String key, String expectedValue) throws RedisDriverException {
         try {
-            Object result = commands.dispatch(io.lettuce.core.protocol.CommandType.DELEX,
-                    new io.lettuce.core.output.IntegerOutput<>(io.lettuce.core.codec.StringCodec.UTF8),
-                    new io.lettuce.core.protocol.CommandArgs<>(io.lettuce.core.codec.StringCodec.UTF8).addKey(key)
-                            .add("IFEQ").add(expectedValue));
+            Object result = commands.dispatch(CommandType.DELEX,
+                    new io.lettuce.core.output.IntegerOutput<>(StringCodec.UTF8),
+                    new CommandArgs<>(StringCodec.UTF8).addKey(key).add("IFEQ").add(expectedValue));
             return Long.valueOf(1).equals(result);
         } catch (Exception e) {
             throw new RedisDriverException("Failed to execute DELEX command on " + identifier, e);
@@ -179,6 +186,40 @@ public class LettuceRedisDriver implements RedisDriver {
         } catch (Exception e) {
             logger.debug("Connection check failed for {}: {}", identifier, e.getMessage());
             return false;
+        }
+    }
+
+    @Override
+    public boolean isResp3() {
+        // Lettuce 6+ stores the negotiated protocol version in the connection state
+        // This is set during the HELLO handshake at connection time - no additional command needed
+        // Cast to implementation class to access getConnectionState()
+        // (ugly but fast)
+        if (connection instanceof StatefulRedisConnectionImpl) {
+            StatefulRedisConnectionImpl<?, ?> impl = (StatefulRedisConnectionImpl<?, ?>) connection;
+            ProtocolVersion protocolVersion = impl.getConnectionState().getNegotiatedProtocolVersion();
+            return protocolVersion == ProtocolVersion.RESP3;
+        }
+        return false;
+    }
+
+    @Override
+    public String configGet(String parameter) throws RedisDriverException {
+        try {
+            Map<String, String> config = commands.configGet(parameter);
+            return config.get(parameter);
+        } catch (Exception e) {
+            throw new RedisDriverException("Failed to execute CONFIG GET on " + identifier, e);
+        }
+    }
+
+    @Override
+    public void configSet(String parameter, String value) throws RedisDriverException {
+        try {
+            commands.configSet(parameter, value);
+        } catch (Exception e) {
+            throw new RedisDriverException(
+                    "Failed to execute CONFIG SET on " + identifier + ". This may be due to ACL restrictions.", e);
         }
     }
 
@@ -221,10 +262,8 @@ public class LettuceRedisDriver implements RedisDriver {
     private boolean setIfValueMatchesNative(String key, String newValue, String expectedCurrentValue, long expireTimeMs)
             throws RedisDriverException {
         try {
-            String result = commands.dispatch(io.lettuce.core.protocol.CommandType.SET,
-                    new io.lettuce.core.output.StatusOutput<>(io.lettuce.core.codec.StringCodec.UTF8),
-                    new io.lettuce.core.protocol.CommandArgs<>(io.lettuce.core.codec.StringCodec.UTF8).addKey(key)
-                            .addValue(newValue).add("IFEQ").add(expectedCurrentValue).add("PX").add(expireTimeMs));
+            SetArgs setArgs = SetArgs.Builder.px(expireTimeMs).compareCondition(valueEq(expectedCurrentValue));
+            String result = commands.set(key, newValue, setArgs);
             return "OK".equals(result);
         } catch (Exception e) {
             throw new RedisDriverException("Failed to execute SET IFEQ command on " + identifier, e);
@@ -278,18 +317,11 @@ public class LettuceRedisDriver implements RedisDriver {
     }
 
     @Override
-    public Double zScore(String key, String member) throws RedisDriverException {
-        try {
-            return commands.zscore(key, member);
-        } catch (Exception e) {
-            throw new RedisDriverException("Failed to execute ZSCORE on " + identifier, e);
-        }
-    }
-
-    @Override
     public long zRemRangeByScore(String key, double minScore, double maxScore) throws RedisDriverException {
         try {
-            Long result = commands.zremrangebyscore(key, minScore, maxScore);
+            // Use Range to avoid deprecated double,double overload
+            io.lettuce.core.Range<Double> range = io.lettuce.core.Range.create(minScore, maxScore);
+            Long result = commands.zremrangebyscore(key, range);
             return result != null ? result : 0;
         } catch (Exception e) {
             throw new RedisDriverException("Failed to execute ZREMRANGEBYSCORE on " + identifier, e);
@@ -382,8 +414,19 @@ public class LettuceRedisDriver implements RedisDriver {
                 }
 
                 @Override
+                public void message(String pattern, String channel, String message) {
+                    // Pattern subscription messages - forward to handler with actual channel
+                    handler.onMessage(channel, message);
+                }
+
+                @Override
                 public void subscribed(String channel, long count) {
                     logger.debug("Subscribed to channel {} on {}", channel, identifier);
+                }
+
+                @Override
+                public void psubscribed(String pattern, long count) {
+                    logger.debug("Pattern subscribed to {} on {}", pattern, identifier);
                 }
 
                 @Override
@@ -392,7 +435,20 @@ public class LettuceRedisDriver implements RedisDriver {
                 }
             });
 
-            pubSubCommands.subscribe(channels);
+            // Check if any channels contain wildcards - use psubscribe for patterns
+            boolean hasPattern = false;
+            for (String channel : channels) {
+                if (channel.contains("*") || channel.contains("?") || channel.contains("[")) {
+                    hasPattern = true;
+                    break;
+                }
+            }
+
+            if (hasPattern) {
+                pubSubCommands.psubscribe(channels);
+            } else {
+                pubSubCommands.subscribe(channels);
+            }
         } catch (Exception e) {
             handler.onError(e);
             throw new RedisDriverException("Failed to execute SUBSCRIBE on " + identifier, e);

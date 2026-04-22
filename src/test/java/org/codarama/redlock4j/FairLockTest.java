@@ -63,8 +63,8 @@ public class FairLockTest {
     void shouldAcquireLockWhenAtFrontOfQueueAndQuorumSucceeds() throws RedisDriverException, InterruptedException {
         setupSuccessfulAcquisition();
 
-        FairLock lock = new FairLock("test-fair", drivers, testConfig);
-        boolean acquired = lock.tryLock(1, TimeUnit.SECONDS);
+        FairLock lock = new FairLock("test-fair", drivers, testConfig, null);
+        boolean acquired = lock.tryLock(Duration.ofSeconds(1));
 
         assertTrue(acquired);
         assertTrue(lock.isHeldByCurrentThread());
@@ -83,9 +83,9 @@ public class FairLockTest {
         when(mockDriver2.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
         when(mockDriver3.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
 
-        FairLock lock = new FairLock("test-fair", drivers, testConfig);
+        FairLock lock = new FairLock("test-fair", drivers, testConfig, null);
 
-        boolean acquired = lock.tryLock(100, TimeUnit.MILLISECONDS);
+        boolean acquired = lock.tryLock(Duration.ofMillis(100));
 
         assertFalse(acquired);
         assertFalse(lock.isHeldByCurrentThread());
@@ -97,13 +97,13 @@ public class FairLockTest {
     void shouldSupportReentrantAcquisition() throws RedisDriverException, InterruptedException {
         setupSuccessfulAcquisition();
 
-        FairLock lock = new FairLock("test-reentrant", drivers, testConfig);
+        FairLock lock = new FairLock("test-reentrant", drivers, testConfig, null);
 
-        assertTrue(lock.tryLock(1, TimeUnit.SECONDS));
+        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
         assertEquals(1, lock.getHoldCount());
 
         // Reentrant acquisition should succeed without Redis calls
-        assertTrue(lock.tryLock(1, TimeUnit.SECONDS));
+        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
         assertEquals(2, lock.getHoldCount());
 
         lock.unlock();
@@ -119,13 +119,13 @@ public class FairLockTest {
 
     @Test
     void shouldReportZeroValidityTimeWhenNotHeld() {
-        FairLock lock = new FairLock("test-validity", drivers, testConfig);
-        assertEquals(0, lock.getRemainingValidityTime());
+        FairLock lock = new FairLock("test-validity", drivers, testConfig, null);
+        assertTrue(lock.getRemainingValidityTime().isZero());
     }
 
     @Test
     void shouldThrowOnNewCondition() {
-        FairLock lock = new FairLock("test-condition", drivers, testConfig);
+        FairLock lock = new FairLock("test-condition", drivers, testConfig, null);
         assertThrows(UnsupportedOperationException.class, lock::newCondition);
     }
 

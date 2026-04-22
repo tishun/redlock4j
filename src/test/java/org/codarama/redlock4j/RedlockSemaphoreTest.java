@@ -60,24 +60,24 @@ public class RedlockSemaphoreTest {
 
     @Test
     void shouldRejectZeroPermits() {
-        assertThrows(IllegalArgumentException.class, () -> new RedlockSemaphore("test", 0, drivers, testConfig));
+        assertThrows(IllegalArgumentException.class, () -> new RedlockSemaphore("test", 0, drivers, testConfig, null));
     }
 
     @Test
     void shouldRejectNegativePermits() {
-        assertThrows(IllegalArgumentException.class, () -> new RedlockSemaphore("test", -1, drivers, testConfig));
+        assertThrows(IllegalArgumentException.class, () -> new RedlockSemaphore("test", -1, drivers, testConfig, null));
     }
 
     @Test
     void shouldRejectAcquiringMoreThanMaxPermits() {
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 3, drivers, testConfig);
-        assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(4, 1, TimeUnit.SECONDS));
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 3, drivers, testConfig, null);
+        assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(4, Duration.ofSeconds(1)));
     }
 
     @Test
     void shouldRejectAcquiringZeroPermits() {
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 3, drivers, testConfig);
-        assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(0, 1, TimeUnit.SECONDS));
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 3, drivers, testConfig, null);
+        assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(0, Duration.ofSeconds(1)));
     }
 
     // ========== Acquisition ==========
@@ -89,8 +89,8 @@ public class RedlockSemaphoreTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
-        boolean acquired = semaphore.tryAcquire(1, TimeUnit.SECONDS);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
+        boolean acquired = semaphore.tryAcquire(Duration.ofSeconds(1));
 
         assertTrue(acquired);
         verify(mockDriver1, atLeastOnce()).setIfNotExists(contains(":permit:"), anyString(), anyLong());
@@ -103,8 +103,8 @@ public class RedlockSemaphoreTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
-        boolean acquired = semaphore.tryAcquire(100, TimeUnit.MILLISECONDS);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
+        boolean acquired = semaphore.tryAcquire(Duration.ofMillis(100));
 
         assertFalse(acquired);
     }
@@ -115,8 +115,8 @@ public class RedlockSemaphoreTest {
     void shouldReleasePermitAfterAcquisition() throws RedisDriverException, InterruptedException {
         setupSuccessfulAcquisition();
 
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
-        semaphore.tryAcquire(1, TimeUnit.SECONDS);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
+        semaphore.tryAcquire(Duration.ofSeconds(1));
         semaphore.release();
 
         // Verify deleteIfValueMatches was called to release permit
@@ -125,7 +125,7 @@ public class RedlockSemaphoreTest {
 
     @Test
     void shouldHandleReleaseWithoutAcquisition() {
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
         // Should not throw
         semaphore.release();
     }
@@ -134,7 +134,7 @@ public class RedlockSemaphoreTest {
 
     @Test
     void shouldReportMaxPermitsWhenNoStateTracked() {
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
         // Current implementation returns maxPermits
         assertEquals(5, semaphore.availablePermits());
     }
@@ -147,8 +147,8 @@ public class RedlockSemaphoreTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig);
-        boolean acquired = semaphore.tryAcquire(3, 1, TimeUnit.SECONDS);
+        RedlockSemaphore semaphore = new RedlockSemaphore("test", 5, drivers, testConfig, null);
+        boolean acquired = semaphore.tryAcquire(3, Duration.ofSeconds(1));
 
         assertTrue(acquired);
         // 3 permits, each on 3 nodes = at least 3 setIfNotExists calls per driver

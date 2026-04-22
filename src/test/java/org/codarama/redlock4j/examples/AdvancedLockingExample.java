@@ -224,7 +224,7 @@ public class AdvancedLockingExample {
             new Thread(() -> {
                 try {
                     System.out.println("   Thread " + threadNum + ": Requesting permit...");
-                    if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+                    if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
                         try {
                             System.out.println("   Thread " + threadNum + ": ✓ Acquired permit, making API call...");
                             Thread.sleep(1000);
@@ -279,7 +279,7 @@ public class AdvancedLockingExample {
 
         // Main thread waits for all services
         System.out.println("   Main: Waiting for all services...");
-        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        boolean completed = latch.await(Duration.ofSeconds(10));
 
         if (completed) {
             System.out.println("   Main: ✓ All services initialized! Application ready.");

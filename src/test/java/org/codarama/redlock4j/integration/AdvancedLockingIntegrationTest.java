@@ -217,7 +217,7 @@ public class AdvancedLockingIntegrationTest {
                 try (RedlockManager mgr = RedlockManager.withJedis(testConfiguration)) {
                     RedlockCountDownLatch waitLatch = mgr.createCountDownLatch("test-latch-await", 2);
                     threadStarted.countDown();
-                    if (waitLatch.await(10, TimeUnit.SECONDS)) {
+                    if (waitLatch.await(Duration.ofSeconds(10))) {
                         awaitCompleted.incrementAndGet();
                     }
                 } catch (InterruptedException e) {

@@ -6,68 +6,65 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
-import org.codarama.redlock4j.driver.RedisDriverException;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 
 /**
  * Implementation of the Redlock distributed locking algorithm that implements Java's Lock interface.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
-public class Redlock implements Lock {
+public class Redlock extends AbstractRedlock implements Lock {
     private static final Logger logger = LoggerFactory.getLogger(Redlock.class);
 
     private final String lockKey;
-    private final List<RedisDriver> redisDrivers;
-    private final RedlockConfiguration config;
-    private final SecureRandom secureRandom;
 
     // Thread-local storage for lock state
     private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
 
-    private static class LockState {
-        final String lockValue;
-        final long acquisitionTime;
-        final long validityTime;
-        int holdCount; // For reentrancy
-
-        LockState(String lockValue, long acquisitionTime, long validityTime) {
-            this.lockValue = lockValue;
-            this.acquisitionTime = acquisitionTime;
-            this.validityTime = validityTime;
-            this.holdCount = 1; // Initial acquisition
-        }
-
-        boolean isValid() {
-            return System.currentTimeMillis() < acquisitionTime + validityTime;
-        }
-
-        void incrementHoldCount() {
-            holdCount++;
-        }
-
-        int decrementHoldCount() {
-            return --holdCount;
+    private static class LockState extends BaseLockState {
+        LockState(String lockValue, Instant acquisitionTime, Duration validityDuration) {
+            super(lockValue, acquisitionTime, validityDuration);
         }
     }
 
-    public Redlock(String lockKey, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
+    /**
+     * Creates a new distributed lock.
+     *
+     * @param lockKey
+     *            the unique identifier for this lock
+     * @param redisDrivers
+     *            the Redis drivers to use
+     * @param config
+     *            the Redlock configuration
+     * @param waitStrategy
+     *            the wait strategy for lock contention
+     */
+    public Redlock(String lockKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+            LockWaitStrategy waitStrategy) {
+        super(redisDrivers, config, waitStrategy);
         this.lockKey = lockKey;
-        this.redisDrivers = redisDrivers;
-        this.config = config;
-        this.secureRandom = new SecureRandom();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws RedlockException
+     *             if the lock cannot be acquired within the configured timeout
+     */
     @Override
     public void lock() {
         try {
-            if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+            if (!tryLock(config.getLockAcquisitionTimeout())) {
                 throw new RedlockException("Failed to acquire lock within timeout: " + lockKey);
             }
         } catch (InterruptedException e) {
@@ -76,25 +73,40 @@ public class Redlock implements Lock {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws RedlockException
+     *             if the lock cannot be acquired within the configured timeout
+     */
     @Override
     public void lockInterruptibly() throws InterruptedException {
-        if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        if (!tryLock(config.getLockAcquisitionTimeout())) {
             throw new RedlockException("Failed to acquire lock within timeout: " + lockKey);
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean tryLock() {
         try {
-            return tryLock(0, TimeUnit.MILLISECONDS);
+            return tryLock(Duration.ZERO);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         }
     }
 
-    @Override
-    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+    /**
+     * Attempts to acquire the lock within the specified timeout.
+     *
+     * @param timeout
+     *            the maximum time to wait for the lock
+     * @return true if the lock was acquired, false if timeout elapsed
+     * @throws InterruptedException
+     *             if the thread is interrupted while waiting
+     */
+    public boolean tryLock(Duration timeout) throws InterruptedException {
         // Check if current thread already holds the lock (reentrancy)
         LockState currentState = lockState.get();
         if (currentState != null && currentState.isValid()) {
@@ -103,69 +115,65 @@ public class Redlock implements Lock {
             return true;
         }
 
-        long timeoutMs = unit.toMillis(time);
-        long startTime = System.currentTimeMillis();
+        Instant deadline = Instant.now().plus(timeout);
 
-        for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
+        int attempt = 0;
+        while (true) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new InterruptedException();
             }
 
+            // Check if we've exceeded the timeout
+            Duration remaining = Duration.between(Instant.now(), deadline);
+            if (!timeout.isZero() && remaining.isNegative()) {
+                logger.debug("Lock acquisition timeout exceeded for {} after {} attempts", lockKey, attempt);
+                return false;
+            }
+
             LockResult result = attemptLock();
             if (result.isAcquired()) {
-                lockState.set(
-                        new LockState(result.getLockValue(), System.currentTimeMillis(), result.getValidityTimeMs()));
+                lockState.set(new LockState(result.getLockValue(), Instant.now(),
+                        Duration.ofMillis(result.getValidityTimeMs())));
                 logger.debug("Successfully acquired lock {} on attempt {}", lockKey, attempt + 1);
                 return true;
             }
 
-            // Check if we've exceeded the timeout
-            if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
-                logger.debug("Lock acquisition timeout exceeded for {}", lockKey);
-                break;
+            // For zero timeout (tryLock()), only try once
+            if (timeout.isZero()) {
+                logger.debug("Lock {} not available for immediate acquisition", lockKey);
+                return false;
             }
 
-            // Wait before retrying (except on the last attempt)
-            if (attempt < config.getMaxRetryAttempts()) {
-                long delay = config.getRetryDelayMs() + ThreadLocalRandom.current().nextLong(config.getRetryDelayMs());
-                Thread.sleep(delay);
+            // Wait before retrying
+            remaining = Duration.between(Instant.now(), deadline);
+            if (!remaining.isNegative()) {
+                waitForLockReleaseWithJitter(remaining);
             }
+            attempt++;
         }
+    }
 
-        logger.debug("Failed to acquire lock {} after {} attempts", lockKey, config.getMaxRetryAttempts() + 1);
-        return false;
+    /**
+     * Waits for the lock to be released with added jitter for backward compatibility.
+     */
+    private void waitForLockReleaseWithJitter(Duration remainingTimeout) throws InterruptedException {
+        if (waitStrategy != null) {
+            waitForLockRelease(lockKey, remainingTimeout.toMillis());
+        } else {
+            // Fallback to simple sleep with jitter (backward compatibility for Redlock)
+            long retryDelayMs = config.getRetryDelay().toMillis();
+            long delay = retryDelayMs + ThreadLocalRandom.current().nextLong(retryDelayMs);
+            Thread.sleep(delay);
+        }
     }
 
     private LockResult attemptLock() {
         String lockValue = generateLockValue();
-        long startTime = System.currentTimeMillis();
-        int successfulNodes = 0;
-
-        // Try to acquire the lock on all nodes
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                if (driver.setIfNotExists(lockKey, lockValue, config.getDefaultLockTimeoutMs())) {
-                    successfulNodes++;
-                }
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to acquire lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
-
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-        long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
-
-        boolean acquired = successfulNodes >= config.getQuorum() && validityTime > 0;
-
-        if (!acquired) {
-            // Release any locks we managed to acquire
-            releaseLock(lockValue);
-        }
-
-        return new LockResult(acquired, validityTime, lockValue, successfulNodes, redisDrivers.size());
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        return executionStrategy.acquireLock(lockKey, lockValue, config.getDefaultLockTimeout().toMillis());
     }
 
+    /** {@inheritDoc} */
     @Override
     public void unlock() {
         LockState state = lockState.get();
@@ -194,25 +202,16 @@ public class Redlock implements Lock {
     }
 
     private void releaseLock(String lockValue) {
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                driver.deleteIfValueMatches(lockKey, lockValue);
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to release lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        executionStrategy.releaseLock(lockKey, lockValue);
     }
 
-    private String generateLockValue() {
-        byte[] bytes = new byte[20];
-        secureRandom.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
+    /**
+     * Not supported - distributed locks cannot provide condition variables.
+     *
+     * @throws UnsupportedOperationException
+     *             always
+     */
     @Override
     public Condition newCondition() {
         throw new UnsupportedOperationException("Conditions are not supported by distributed locks");
@@ -220,26 +219,20 @@ public class Redlock implements Lock {
 
     /**
      * Checks if the current thread holds this lock.
-     * 
+     *
      * @return true if the current thread holds the lock and it's still valid
      */
     public boolean isHeldByCurrentThread() {
-        LockState state = lockState.get();
-        return state != null && state.isValid();
+        return isLockStateValid(lockState.get());
     }
 
     /**
      * Gets the remaining validity time of the lock for the current thread.
      *
-     * @return remaining validity time in milliseconds, or 0 if not held or expired
+     * @return remaining validity time, or {@link Duration#ZERO} if not held or expired
      */
-    public long getRemainingValidityTime() {
-        LockState state = lockState.get();
-        if (state == null) {
-            return 0;
-        }
-        long remaining = state.acquisitionTime + state.validityTime - System.currentTimeMillis();
-        return Math.max(0, remaining);
+    public Duration getRemainingValidityTime() {
+        return Duration.ofMillis(calculateRemainingValidityTime(lockState.get()));
     }
 
     /**
@@ -250,7 +243,7 @@ public class Redlock implements Lock {
      */
     public int getHoldCount() {
         LockState state = lockState.get();
-        return state != null && state.isValid() ? state.holdCount : 0;
+        return isLockStateValid(state) ? state.getHoldCount() : 0;
     }
 
     /**
@@ -287,41 +280,35 @@ public class Redlock implements Lock {
             return false;
         }
 
-        long startTime = System.currentTimeMillis();
-        int successfulNodes = 0;
-        long newExpireTimeMs = config.getDefaultLockTimeoutMs() + additionalTimeMs;
+        Duration additionalTime = Duration.ofMillis(additionalTimeMs);
+        Duration newExpireTime = config.getDefaultLockTimeout().plus(additionalTime);
 
-        // Try to extend the lock on all nodes using CAS operation
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                // Use setIfValueMatches to atomically extend only if lock value matches
-                if (driver.setIfValueMatches(lockKey, state.lockValue, state.lockValue, newExpireTimeMs)) {
-                    successfulNodes++;
-                }
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to extend lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
-
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (newExpireTimeMs * config.getClockDriftFactor()) + 2;
-        long newValidityTime = newExpireTimeMs - elapsedTime - driftTime;
-
-        boolean extended = successfulNodes >= config.getQuorum() && newValidityTime > 0;
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        boolean extended = executionStrategy.extendLock(lockKey, state.lockValue, newExpireTime.toMillis());
 
         if (extended) {
+            // Calculate new validity time using strategy
+            long newValidityTimeMs = executionStrategy.calculateValidityTime(newExpireTime.toMillis(), 0);
+            Duration newValidityDuration = Duration.ofMillis(newValidityTimeMs);
             // Update local lock state with new validity time
             // Note: We create a new LockState to maintain immutability of timing fields
-            LockState newState = new LockState(state.lockValue, System.currentTimeMillis(), newValidityTime);
+            LockState newState = new LockState(state.lockValue, Instant.now(), newValidityDuration);
             newState.holdCount = state.holdCount; // Preserve hold count
             lockState.set(newState);
-            logger.debug("Successfully extended lock {} on {}/{} nodes (new validity: {}ms)", lockKey, successfulNodes,
-                    redisDrivers.size(), newValidityTime);
+            logger.debug("Successfully extended lock {} (new validity: {})", lockKey, newValidityDuration);
         } else {
-            logger.debug("Failed to extend lock {} - only {}/{} nodes succeeded (quorum: {})", lockKey, successfulNodes,
-                    redisDrivers.size(), config.getQuorum());
+            logger.debug("Failed to extend lock {}", lockKey);
         }
 
         return extended;
+    }
+
+    /**
+     * Returns the lock key.
+     *
+     * @return the key identifying this lock
+     */
+    public String getLockKey() {
+        return lockKey;
     }
 }

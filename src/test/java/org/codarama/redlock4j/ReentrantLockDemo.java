@@ -65,7 +65,7 @@ public class ReentrantLockDemo {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("demo-key", drivers, testConfig);
+        Redlock lock = new Redlock("demo-key", drivers, testConfig, null);
 
         System.out.println("=== Reentrant Lock Demonstration ===");
 

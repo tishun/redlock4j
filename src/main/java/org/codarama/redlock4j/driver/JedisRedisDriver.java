@@ -7,16 +7,27 @@ package org.codarama.redlock4j.driver;
 import org.codarama.redlock4j.configuration.RedisNodeConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.CommandArguments;
+import redis.clients.jedis.ConnectionPoolConfig;
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisPubSub;
+import redis.clients.jedis.Protocol;
+import redis.clients.jedis.RedisClient;
+import redis.clients.jedis.UnifiedJedis;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.params.SetParams;
+import redis.clients.jedis.util.CompareCondition;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+
+import static java.util.Arrays.asList;
+import static redis.clients.jedis.Protocol.Command.CONFIG;
+import static redis.clients.jedis.Protocol.Command.HELLO;
+import static redis.clients.jedis.util.CompareCondition.valueEq;
 
 /**
  * Jedis implementation of the RedisDriver interface with automatic CAS/CAD detection.
@@ -29,6 +40,9 @@ import java.util.Set;
  * </ul>
  * Detection happens once at driver initialization.
  * </p>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class JedisRedisDriver implements RedisDriver {
     private static final Logger logger = LoggerFactory.getLogger(JedisRedisDriver.class);
@@ -52,37 +66,38 @@ public class JedisRedisDriver implements RedisDriver {
         SCRIPT
     }
 
-    private final JedisPool jedisPool;
+    private final RedisClient jedis;
     private final String identifier;
     private final CADStrategy cadStrategy;
 
     public JedisRedisDriver(RedisNodeConfiguration config) {
         this.identifier = "redis://" + config.getHost() + ":" + config.getPort();
 
-        JedisPoolConfig poolConfig = new JedisPoolConfig();
+        ConnectionPoolConfig poolConfig = new ConnectionPoolConfig();
         poolConfig.setMaxTotal(10);
         poolConfig.setMaxIdle(5);
         poolConfig.setMinIdle(1);
-        poolConfig.setTestOnBorrow(true);
-        poolConfig.setTestOnReturn(true);
-        poolConfig.setTestWhileIdle(true);
+        // Disable pool validation tests - they can cause ClassCastException with RESP3
+        // due to ping() response format differences between RESP2 and RESP3
+        poolConfig.setTestOnBorrow(false);
+        poolConfig.setTestOnReturn(false);
+        poolConfig.setTestWhileIdle(false);
 
-        // Build Redis URI
-        StringBuilder uriBuilder = new StringBuilder("redis://");
+        HostAndPort hostAndPort = new HostAndPort(config.getHost(), config.getPort());
+
+        DefaultJedisClientConfig.Builder clientConfigBuilder = DefaultJedisClientConfig.builder()
+                .connectionTimeoutMillis(config.getConnectionTimeoutMs())
+                .socketTimeoutMillis(config.getSocketTimeoutMs()).database(config.getDatabase());
+
         if (config.getPassword() != null && !config.getPassword().trim().isEmpty()) {
-            uriBuilder.append(":").append(config.getPassword()).append("@");
-        }
-        uriBuilder.append(config.getHost()).append(":").append(config.getPort());
-        if (config.getDatabase() != 0) {
-            uriBuilder.append("/").append(config.getDatabase());
+            clientConfigBuilder.password(config.getPassword());
         }
 
         try {
-            java.net.URI redisUri = java.net.URI.create(uriBuilder.toString());
-            this.jedisPool = new JedisPool(poolConfig, redisUri, config.getConnectionTimeoutMs(),
-                    config.getSocketTimeoutMs());
+            this.jedis = RedisClient.builder().hostAndPort(hostAndPort).clientConfig(clientConfigBuilder.build())
+                    .poolConfig(poolConfig).build();
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create Jedis pool for " + identifier, e);
+            throw new RuntimeException("Failed to create Redis client for " + identifier, e);
         }
 
         logger.debug("Created Jedis driver for {}", identifier);
@@ -96,10 +111,10 @@ public class JedisRedisDriver implements RedisDriver {
      * Detects whether native CAS/CAD commands are available. This is called once during driver initialization.
      */
     private CADStrategy detectCADStrategy() {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             // Try to execute DELEX on a test key
             String testKey = "__redlock4j_cad_test__" + System.currentTimeMillis();
-            jedis.sendCommand(redis.clients.jedis.Protocol.Command.DELEX, testKey, "IFEQ", "test_value");
+            jedis.delex(testKey, CompareCondition.valueEq("test_value"));
             logger.debug("Native CAS/CAD commands detected for {}", identifier);
             return CADStrategy.NATIVE;
         } catch (Exception e) {
@@ -111,7 +126,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public boolean setIfNotExists(String key, String value, long expireTimeMs) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             SetParams params = SetParams.setParams().nx().px(expireTimeMs);
             String result = jedis.set(key, value, params);
             return "OK".equals(result);
@@ -136,8 +151,8 @@ public class JedisRedisDriver implements RedisDriver {
      * Deletes a key using native DELEX command (Redis 8.4+).
      */
     private boolean deleteIfValueMatchesNative(String key, String expectedValue) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
-            Object result = jedis.sendCommand(redis.clients.jedis.Protocol.Command.DELEX, key, "IFEQ", expectedValue);
+        try {
+            Long result = jedis.delex(key, CompareCondition.valueEq(expectedValue));
             return Long.valueOf(1).equals(result);
         } catch (JedisException e) {
             throw new RedisDriverException("Failed to execute DELEX command on " + identifier, e);
@@ -148,7 +163,7 @@ public class JedisRedisDriver implements RedisDriver {
      * Deletes a key using Lua script (legacy compatibility).
      */
     private boolean deleteIfValueMatchesScript(String key, String expectedValue) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Object result = jedis.eval(DELETE_IF_VALUE_MATCHES_SCRIPT, Collections.singletonList(key),
                     Collections.singletonList(expectedValue));
             return Long.valueOf(1).equals(result);
@@ -159,11 +174,63 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public boolean isConnected() {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             return "PONG".equals(jedis.ping());
         } catch (Exception e) {
             logger.debug("Connection check failed for {}: {}", identifier, e.getMessage());
             return false;
+        }
+    }
+
+    @Override
+    public boolean isResp3() {
+        try {
+            // Jedis 7+ supports RESP3 via the HELLO command
+            // Try to execute HELLO to verify RESP3 support
+            Object result = jedis.executeCommand(new CommandArguments(Protocol.Command.HELLO));
+            // If HELLO succeeds, we have RESP3 support
+            return result != null;
+        } catch (Exception e) {
+            // HELLO command failed - likely RESP2 or old Redis
+            logger.debug("RESP3 check failed for {}: {}", identifier, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public String configGet(String parameter) throws RedisDriverException {
+        try {
+            // Use executeCommand for CONFIG GET
+            Object result = jedis
+                    .executeCommand(new CommandArguments(Protocol.Command.CONFIG).add("GET").add(parameter));
+            // Result format depends on protocol:
+            // - RESP2: List [parameter, value]
+            // - RESP3: Map {parameter: value}
+            if (result instanceof Map) {
+                Map<?, ?> map = (Map<?, ?>) result;
+                Object val = map.get(parameter);
+                return new String((byte[]) val, StandardCharsets.UTF_8);
+            } else if (result instanceof List) {
+                List<?> list = (List<?>) result;
+                if (list.size() >= 2 && list.get(1) instanceof byte[]) {
+                    Object val = list.get(1);
+                    return new String((byte[]) val, StandardCharsets.UTF_8);
+                }
+            }
+            return "";
+        } catch (JedisException e) {
+            throw new RedisDriverException("Failed to execute CONFIG GET on " + identifier, e);
+        }
+    }
+
+    @Override
+    public void configSet(String parameter, String value) throws RedisDriverException {
+        try {
+            // Use native configSet method
+            jedis.configSet(parameter, value);
+        } catch (JedisException e) {
+            throw new RedisDriverException(
+                    "Failed to execute CONFIG SET on " + identifier + ". This may be due to ACL restrictions.", e);
         }
     }
 
@@ -174,8 +241,8 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public void close() {
-        if (jedisPool != null && !jedisPool.isClosed()) {
-            jedisPool.close();
+        if (jedis != null) {
+            jedis.close();
             logger.debug("Closed Jedis driver for {}", identifier);
         }
     }
@@ -198,9 +265,9 @@ public class JedisRedisDriver implements RedisDriver {
      */
     private boolean setIfValueMatchesNative(String key, String newValue, String expectedCurrentValue, long expireTimeMs)
             throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
-            Object result = jedis.sendCommand(redis.clients.jedis.Protocol.Command.SET, key, newValue, "IFEQ",
-                    expectedCurrentValue, "PX", String.valueOf(expireTimeMs));
+        try {
+            SetParams setParams = SetParams.setParams().px(expireTimeMs).condition(valueEq(expectedCurrentValue));
+            String result = jedis.set(key, newValue, setParams);
             return "OK".equals(result);
         } catch (JedisException e) {
             throw new RedisDriverException("Failed to execute SET IFEQ command on " + identifier, e);
@@ -212,9 +279,9 @@ public class JedisRedisDriver implements RedisDriver {
      */
     private boolean setIfValueMatchesScript(String key, String newValue, String expectedCurrentValue, long expireTimeMs)
             throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Object result = jedis.eval(SET_IF_VALUE_MATCHES_SCRIPT, Collections.singletonList(key),
-                    java.util.Arrays.asList(expectedCurrentValue, newValue, String.valueOf(expireTimeMs)));
+                    asList(expectedCurrentValue, newValue, String.valueOf(expireTimeMs)));
             return "OK".equals(result);
         } catch (JedisException e) {
             throw new RedisDriverException("Failed to execute SET script on " + identifier, e);
@@ -225,7 +292,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public boolean zAdd(String key, double score, String member) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.zadd(key, score, member);
             return result != null && result > 0;
         } catch (JedisException e) {
@@ -235,7 +302,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public boolean zRem(String key, String member) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.zrem(key, member);
             return result != null && result > 0;
         } catch (JedisException e) {
@@ -245,7 +312,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public List<String> zRange(String key, long start, long stop) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             List<String> result = jedis.zrange(key, start, stop);
             return result != null ? result : Collections.emptyList();
         } catch (JedisException e) {
@@ -254,17 +321,8 @@ public class JedisRedisDriver implements RedisDriver {
     }
 
     @Override
-    public Double zScore(String key, String member) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
-            return jedis.zscore(key, member);
-        } catch (JedisException e) {
-            throw new RedisDriverException("Failed to execute ZSCORE on " + identifier, e);
-        }
-    }
-
-    @Override
     public long zRemRangeByScore(String key, double minScore, double maxScore) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.zremrangeByScore(key, minScore, maxScore);
             return result != null ? result : 0;
         } catch (JedisException e) {
@@ -276,7 +334,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public long incr(String key) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.incr(key);
             return result != null ? result : 0;
         } catch (JedisException e) {
@@ -286,7 +344,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public long decr(String key) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.decr(key);
             return result != null ? result : 0;
         } catch (JedisException e) {
@@ -296,8 +354,8 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public long decrAndPublishIfZero(String key, String channel, String message) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
-            Object result = jedis.eval(DECR_AND_PUBLISH_IF_ZERO_SCRIPT, java.util.Arrays.asList(key, channel),
+        try {
+            Object result = jedis.eval(DECR_AND_PUBLISH_IF_ZERO_SCRIPT, asList(key, channel),
                     Collections.singletonList(message));
             return result != null ? ((Number) result).longValue() : 0;
         } catch (JedisException e) {
@@ -307,7 +365,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public String get(String key) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             return jedis.get(key);
         } catch (JedisException e) {
             throw new RedisDriverException("Failed to execute GET on " + identifier, e);
@@ -316,16 +374,18 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public void setex(String key, String value, long expireTimeMs) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.psetex(key, expireTimeMs, value);
+        try {
+            // Use SET with PX option instead of deprecated psetex
+            SetParams params = SetParams.setParams().px(expireTimeMs);
+            jedis.set(key, value, params);
         } catch (JedisException e) {
-            throw new RedisDriverException("Failed to execute SETEX on " + identifier, e);
+            throw new RedisDriverException("Failed to execute SET PX on " + identifier, e);
         }
     }
 
     @Override
     public long del(String... keys) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.del(keys);
             return result != null ? result : 0;
         } catch (JedisException e) {
@@ -337,7 +397,7 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public long publish(String channel, String message) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        try {
             Long result = jedis.publish(channel, message);
             return result != null ? result : 0;
         } catch (JedisException e) {
@@ -347,10 +407,18 @@ public class JedisRedisDriver implements RedisDriver {
 
     @Override
     public void subscribe(MessageHandler handler, String... channels) throws RedisDriverException {
-        try (Jedis jedis = jedisPool.getResource()) {
+        // For pub/sub, we need a dedicated connection that stays in subscribe mode
+        // RedisClient's UnifiedJedis handles this internally
+        try {
             JedisPubSub jedisPubSub = new JedisPubSub() {
                 @Override
                 public void onMessage(String channel, String message) {
+                    handler.onMessage(channel, message);
+                }
+
+                @Override
+                public void onPMessage(String pattern, String channel, String message) {
+                    // Pattern subscription messages - forward to handler with actual channel
                     handler.onMessage(channel, message);
                 }
 
@@ -360,11 +428,30 @@ public class JedisRedisDriver implements RedisDriver {
                 }
 
                 @Override
+                public void onPSubscribe(String pattern, int subscribedChannels) {
+                    logger.debug("Pattern subscribed to {} on {}", pattern, identifier);
+                }
+
+                @Override
                 public void onUnsubscribe(String channel, int subscribedChannels) {
                     logger.debug("Unsubscribed from channel {} on {}", channel, identifier);
                 }
             };
-            jedis.subscribe(jedisPubSub, channels);
+
+            // Check if any channels contain wildcards - use psubscribe for patterns
+            boolean hasPattern = false;
+            for (String ch : channels) {
+                if (ch.contains("*") || ch.contains("?") || ch.contains("[")) {
+                    hasPattern = true;
+                    break;
+                }
+            }
+
+            if (hasPattern) {
+                jedis.psubscribe(jedisPubSub, channels);
+            } else {
+                jedis.subscribe(jedisPubSub, channels);
+            }
         } catch (JedisException e) {
             handler.onError(e);
             throw new RedisDriverException("Failed to execute SUBSCRIBE on " + identifier, e);

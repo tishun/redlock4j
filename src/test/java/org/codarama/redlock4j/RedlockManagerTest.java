@@ -33,10 +33,10 @@ public class RedlockManagerTest {
     public void testConfigurationValidation() {
         assertNotNull(testConfig);
         assertEquals(3, testConfig.getRedisNodes().size());
-        assertEquals(30000, testConfig.getDefaultLockTimeoutMs());
-        assertEquals(200, testConfig.getRetryDelayMs());
+        assertEquals(Duration.ofSeconds(30), testConfig.getDefaultLockTimeout());
+        assertEquals(Duration.ofMillis(200), testConfig.getRetryDelay());
         assertEquals(3, testConfig.getMaxRetryAttempts());
-        assertEquals(10000, testConfig.getLockAcquisitionTimeoutMs());
+        assertEquals(Duration.ofSeconds(10), testConfig.getLockAcquisitionTimeout());
     }
 
     @Test
@@ -69,11 +69,11 @@ public class RedlockManagerTest {
 
         assertNotNull(config);
         assertEquals(3, config.getRedisNodes().size());
-        assertEquals(60000, config.getDefaultLockTimeoutMs());
-        assertEquals(500, config.getRetryDelayMs());
+        assertEquals(Duration.ofMinutes(1), config.getDefaultLockTimeout());
+        assertEquals(Duration.ofMillis(500), config.getRetryDelay());
         assertEquals(5, config.getMaxRetryAttempts());
         assertEquals(0.02, config.getClockDriftFactor(), 0.001);
-        assertEquals(30000, config.getLockAcquisitionTimeoutMs());
+        assertEquals(Duration.ofSeconds(30), config.getLockAcquisitionTimeout());
     }
 
     @Test
@@ -90,10 +90,37 @@ public class RedlockManagerTest {
                 .addRedisNode("localhost", 6380).addRedisNode("localhost", 6381).build();
 
         // Test default values
-        assertEquals(Duration.ofSeconds(30).toMillis(), config.getDefaultLockTimeoutMs());
-        assertEquals(200, config.getRetryDelayMs());
+        assertEquals(Duration.ofSeconds(30), config.getDefaultLockTimeout());
+        assertEquals(Duration.ofMillis(200), config.getRetryDelay());
         assertEquals(3, config.getMaxRetryAttempts());
         assertEquals(0.01, config.getClockDriftFactor(), 0.001);
-        assertEquals(Duration.ofSeconds(10).toMillis(), config.getLockAcquisitionTimeoutMs());
+        assertEquals(Duration.ofSeconds(10), config.getLockAcquisitionTimeout());
+        assertFalse(config.isSingleNodeMode());
+    }
+
+    @Test
+    public void testSingleNodeModeConfiguration() {
+        // Single node automatically enables single-node mode
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379).build();
+
+        assertTrue(config.isSingleNodeMode());
+        assertEquals(1, config.getRedisNodes().size());
+        assertEquals(1, config.getQuorum());
+    }
+
+    @Test
+    public void testTwoNodesRejected() {
+        // 2 nodes is not supported - cannot form proper quorum
+        assertThrows(IllegalArgumentException.class, () -> RedlockConfiguration.builder()
+                .addRedisNode("localhost", 6379).addRedisNode("localhost", 6380).build());
+    }
+
+    @Test
+    public void testQuorumInMultiNodeMode() {
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379)
+                .addRedisNode("localhost", 6380).addRedisNode("localhost", 6381).build();
+
+        assertFalse(config.isSingleNodeMode());
+        assertEquals(2, config.getQuorum()); // 3 nodes -> quorum of 2
     }
 }

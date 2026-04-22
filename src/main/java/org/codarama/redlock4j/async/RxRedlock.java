@@ -12,6 +12,9 @@ import java.time.Duration;
 /**
  * RxJava reactive distributed lock interface providing reactive streams for lock operations. This interface uses RxJava
  * 3 reactive types for maximum compatibility with reactive applications.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public interface RxRedlock {
 
@@ -54,7 +57,7 @@ public interface RxRedlock {
      *            the interval between validity checks
      * @return an Observable that emits the remaining validity time at each check
      */
-    Observable<Long> validityObservable(Duration checkInterval);
+    Observable<Duration> validityObservable(Duration checkInterval);
 
     /**
      * Creates a reactive stream that emits lock acquisition attempts with retry logic. This provides fine-grained
@@ -85,10 +88,10 @@ public interface RxRedlock {
     /**
      * Gets the remaining validity time of the lock for the current thread. This is a synchronous operation as it only
      * checks local state.
-     * 
-     * @return remaining validity time in milliseconds, or 0 if not held or expired
+     *
+     * @return remaining validity time, or {@link Duration#ZERO} if not held or expired
      */
-    long getRemainingValidityTime();
+    Duration getRemainingValidityTime();
 
     /**
      * Gets the lock key.

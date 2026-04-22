@@ -145,11 +145,12 @@ public class AsyncRedlockIntegrationTest {
             lockObserver.assertValue(true);
 
             // Test validity observable - start immediately and take fewer emissions
-            TestObserver<Long> validityObserver = rxLock.validityObservable(Duration.ofMillis(300)).take(1) // Take only
-                                                                                                            // 1
-                                                                                                            // emission
-                                                                                                            // to be
-                                                                                                            // safe
+            TestObserver<Duration> validityObserver = rxLock.validityObservable(Duration.ofMillis(300)).take(1) // Take
+                                                                                                                // only
+                                                                                                                // 1
+                                                                                                                // emission
+                                                                                                                // to be
+                                                                                                                // safe
                     .test();
 
             validityObserver.await(1, TimeUnit.SECONDS);
@@ -158,8 +159,8 @@ public class AsyncRedlockIntegrationTest {
             assertFalse(validityObserver.values().isEmpty(), "Should have at least 1 validity emission");
 
             // All validity values should be positive
-            validityObserver.values()
-                    .forEach(validity -> assertTrue(validity > 0, "Validity time should be positive: " + validity));
+            validityObserver.values().forEach(
+                    validity -> assertFalse(validity.isZero(), "Validity time should be positive: " + validity));
 
             // Cleanup
             rxLock.unlockRx().test().await();

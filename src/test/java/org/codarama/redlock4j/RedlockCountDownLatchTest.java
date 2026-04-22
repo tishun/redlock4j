@@ -65,13 +65,14 @@ public class RedlockCountDownLatchTest {
 
     @Test
     void shouldRejectNegativeCount() {
-        assertThrows(IllegalArgumentException.class, () -> new RedlockCountDownLatch("test", -1, drivers, testConfig));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RedlockCountDownLatch("test", -1, drivers, testConfig, null));
     }
 
     @Test
     void shouldAllowZeroCount() throws RedisDriverException {
         // Zero is allowed
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 0, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 0, drivers, testConfig, null);
         assertNotNull(latch);
     }
 
@@ -84,7 +85,7 @@ public class RedlockCountDownLatchTest {
         lenient().when(mockDriver2.get(anyString())).thenReturn("5");
         lenient().when(mockDriver3.get(anyString())).thenReturn("5");
 
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig, null);
         long count = latch.getCount();
 
         assertEquals(5, count);
@@ -98,7 +99,7 @@ public class RedlockCountDownLatchTest {
         when(mockDriver2.decrAndPublishIfZero(anyString(), anyString(), anyString())).thenReturn(4L);
         when(mockDriver3.decrAndPublishIfZero(anyString(), anyString(), anyString())).thenReturn(4L);
 
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig, null);
         latch.countDown();
 
         // Give async operations time to complete
@@ -116,10 +117,10 @@ public class RedlockCountDownLatchTest {
         lenient().when(mockDriver2.get(anyString())).thenReturn("0");
         lenient().when(mockDriver3.get(anyString())).thenReturn("0");
 
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 0, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 0, drivers, testConfig, null);
 
         long start = System.currentTimeMillis();
-        boolean result = latch.await(5, TimeUnit.SECONDS);
+        boolean result = latch.await(Duration.ofSeconds(5));
         long elapsed = System.currentTimeMillis() - start;
 
         assertTrue(result);
@@ -132,10 +133,10 @@ public class RedlockCountDownLatchTest {
         when(mockDriver2.get(anyString())).thenReturn("5");
         when(mockDriver3.get(anyString())).thenReturn("5");
 
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig, null);
 
         long start = System.currentTimeMillis();
-        boolean result = latch.await(200, TimeUnit.MILLISECONDS);
+        boolean result = latch.await(Duration.ofMillis(200));
         long elapsed = System.currentTimeMillis() - start;
 
         assertFalse(result);
@@ -146,7 +147,7 @@ public class RedlockCountDownLatchTest {
 
     @Test
     void shouldResetLatchCount() throws RedisDriverException {
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 5, drivers, testConfig, null);
         latch.reset();
 
         // Verify del was called
@@ -162,7 +163,7 @@ public class RedlockCountDownLatchTest {
         lenient().when(mockDriver2.get(anyString())).thenReturn("3");
         lenient().when(mockDriver3.get(anyString())).thenReturn("3");
 
-        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 3, drivers, testConfig);
+        RedlockCountDownLatch latch = new RedlockCountDownLatch("test", 3, drivers, testConfig, null);
         assertTrue(latch.hasQueuedThreads());
     }
 }

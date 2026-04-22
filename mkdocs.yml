@@ -9,6 +9,8 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  logo: logo-dark.svg
+  favicon: logo-dark.svg
   palette:
     # Light mode
     - media: "(prefers-color-scheme: light)"
@@ -43,7 +45,11 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -71,11 +77,14 @@ nav:
     - Basic Usage: guide/basic-usage.md
     - Advanced Locking: guide/advanced-locking.md
     - Redis Clients: guide/redis-clients.md
+    - Architecture: guide/architecture.md
     - Best Practices: guide/best-practices.md
+    - Benchmarks: guide/benchmarks.md
   - API Reference:
-    - Core API: api/core.md
+    - RedlockManager: api/redlock-manager.md
+    - Lock Types: api/lock-types.md
+    - Async & Reactive: api/async-reactive.md
     - Configuration: api/configuration.md
-  - Comparison: comparison.md
 
 extra:
   social:
@@ -87,3 +96,5 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js

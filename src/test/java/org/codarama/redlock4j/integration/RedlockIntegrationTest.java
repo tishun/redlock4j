@@ -81,7 +81,7 @@ public class RedlockIntegrationTest {
             if (lock instanceof Redlock) {
                 Redlock redlock = (Redlock) lock;
                 assertTrue(redlock.isHeldByCurrentThread(), "Lock should be held by current thread");
-                assertTrue(redlock.getRemainingValidityTime() > 0, "Lock should have remaining validity time");
+                assertFalse(redlock.getRemainingValidityTime().isZero(), "Lock should have remaining validity time");
             }
 
             lock.unlock();
@@ -110,10 +110,10 @@ public class RedlockIntegrationTest {
     @Test
     public void testLockTimeout() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            Lock lock = manager.createLock("test-timeout-lock");
+            Redlock lock = manager.createLock("test-timeout-lock");
 
             // Test tryLock with timeout
-            assertTrue(lock.tryLock(1, TimeUnit.SECONDS), "Should acquire lock within timeout");
+            assertTrue(lock.tryLock(Duration.ofSeconds(1)), "Should acquire lock within timeout");
             lock.unlock();
 
             // Test immediate tryLock

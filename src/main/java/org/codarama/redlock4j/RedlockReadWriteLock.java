@@ -6,10 +6,15 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
+import org.codarama.redlock4j.strategy.LockExecutionStrategy;
+import org.codarama.redlock4j.strategy.LockExecutionStrategyFactory;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -68,6 +73,9 @@ import java.util.concurrent.locks.ReadWriteLock;
  *     }
  * }
  * </pre>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class RedlockReadWriteLock implements ReadWriteLock {
     private static final Logger logger = LoggerFactory.getLogger(RedlockReadWriteLock.class);
@@ -76,17 +84,40 @@ public class RedlockReadWriteLock implements ReadWriteLock {
     private final ReadLock readLock;
     private final WriteLock writeLock;
 
-    public RedlockReadWriteLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
+    /**
+     * Creates a new distributed read-write lock.
+     *
+     * @param resourceKey
+     *            the key identifying the shared resource
+     * @param redisDrivers
+     *            the Redis drivers to use
+     * @param config
+     *            the Redlock configuration
+     * @param waitStrategy
+     *            the wait strategy for lock contention
+     */
+    public RedlockReadWriteLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+            LockWaitStrategy waitStrategy) {
         this.resourceKey = resourceKey;
-        this.readLock = new ReadLock(resourceKey, redisDrivers, config);
-        this.writeLock = new WriteLock(resourceKey, redisDrivers, config);
+        this.readLock = new ReadLock(resourceKey, redisDrivers, config, waitStrategy);
+        this.writeLock = new WriteLock(resourceKey, redisDrivers, config, waitStrategy);
     }
 
+    /**
+     * Returns the lock used for reading.
+     *
+     * @return the read lock
+     */
     @Override
     public Lock readLock() {
         return readLock;
     }
 
+    /**
+     * Returns the lock used for writing.
+     *
+     * @return the write lock
+     */
     @Override
     public Lock writeLock() {
         return writeLock;
@@ -95,7 +126,7 @@ public class RedlockReadWriteLock implements ReadWriteLock {
     /**
      * Read lock implementation that allows multiple concurrent readers.
      */
-    private static class ReadLock implements Lock {
+    public static class ReadLock implements Lock {
         private static final Logger logger = LoggerFactory.getLogger(ReadLock.class);
 
         private final String readCountKey;
@@ -103,24 +134,30 @@ public class RedlockReadWriteLock implements ReadWriteLock {
         private final List<RedisDriver> redisDrivers;
         private final RedlockConfiguration config;
         private final SecureRandom secureRandom;
+        private final LockWaitStrategy waitStrategy;
+        private final LockExecutionStrategy executionStrategy;
 
         private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
 
         private static class LockState {
             final String lockValue;
-            final long acquisitionTime;
-            final long validityTime;
+            final Instant acquisitionTime;
+            final Duration validityDuration;
             int holdCount;
 
-            LockState(String lockValue, long acquisitionTime, long validityTime) {
+            LockState(String lockValue, Instant acquisitionTime, Duration validityDuration) {
                 this.lockValue = lockValue;
                 this.acquisitionTime = acquisitionTime;
-                this.validityTime = validityTime;
+                this.validityDuration = validityDuration;
                 this.holdCount = 1;
             }
 
             boolean isValid() {
-                return System.currentTimeMillis() < acquisitionTime + validityTime;
+                return Instant.now().isBefore(getExpiryTime());
+            }
+
+            Instant getExpiryTime() {
+                return acquisitionTime.plus(validityDuration);
             }
 
             void incrementHoldCount() {
@@ -132,18 +169,21 @@ public class RedlockReadWriteLock implements ReadWriteLock {
             }
         }
 
-        ReadLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
+        ReadLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+                LockWaitStrategy waitStrategy) {
             this.readCountKey = resourceKey + ":readers";
             this.writeLockKey = resourceKey + ":write";
             this.redisDrivers = redisDrivers;
             this.config = config;
             this.secureRandom = new SecureRandom();
+            this.waitStrategy = waitStrategy;
+            this.executionStrategy = LockExecutionStrategyFactory.create(redisDrivers, config);
         }
 
         @Override
         public void lock() {
             try {
-                if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+                if (!tryLock(config.getLockAcquisitionTimeout())) {
                     throw new RedlockException("Failed to acquire read lock within timeout");
                 }
             } catch (InterruptedException e) {
@@ -154,7 +194,7 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
         @Override
         public void lockInterruptibly() throws InterruptedException {
-            if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+            if (!tryLock(config.getLockAcquisitionTimeout())) {
                 throw new RedlockException("Failed to acquire read lock within timeout");
             }
         }
@@ -162,7 +202,7 @@ public class RedlockReadWriteLock implements ReadWriteLock {
         @Override
         public boolean tryLock() {
             try {
-                return tryLock(0, TimeUnit.MILLISECONDS);
+                return tryLock(Duration.ZERO);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return false;
@@ -171,6 +211,19 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
         @Override
         public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+            return tryLock(Duration.ofNanos(unit.toNanos(time)));
+        }
+
+        /**
+         * Attempts to acquire the read lock within the given timeout.
+         *
+         * @param timeout
+         *            the maximum time to wait for the lock
+         * @return true if the lock was acquired, false if the timeout elapsed
+         * @throws InterruptedException
+         *             if the current thread is interrupted
+         */
+        public boolean tryLock(Duration timeout) throws InterruptedException {
             // Check if current thread already holds the lock (reentrancy)
             LockState currentState = lockState.get();
             if (currentState != null && currentState.isValid()) {
@@ -179,8 +232,7 @@ public class RedlockReadWriteLock implements ReadWriteLock {
                 return true;
             }
 
-            long timeoutMs = unit.toMillis(time);
-            long startTime = System.currentTimeMillis();
+            Instant deadline = Instant.now().plus(timeout);
 
             for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
                 if (Thread.currentThread().isInterrupted()) {
@@ -192,26 +244,34 @@ public class RedlockReadWriteLock implements ReadWriteLock {
                     // Try to increment reader count
                     String lockValue = generateLockValue();
                     if (incrementReaderCount(lockValue)) {
-                        lockState.set(
-                                new LockState(lockValue, System.currentTimeMillis(), config.getDefaultLockTimeoutMs()));
+                        lockState.set(new LockState(lockValue, Instant.now(), config.getDefaultLockTimeout()));
                         logger.debug("Successfully acquired read lock on attempt {}", attempt + 1);
                         return true;
                     }
                 }
 
                 // Check if we've exceeded the timeout
-                if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
+                Duration remaining = Duration.between(Instant.now(), deadline);
+                if (!timeout.isZero() && remaining.isNegative()) {
                     logger.debug("Read lock acquisition timeout exceeded");
                     break;
                 }
 
                 // Wait before retrying
                 if (attempt < config.getMaxRetryAttempts()) {
-                    Thread.sleep(config.getRetryDelayMs());
+                    waitForLockRelease(remaining.toMillis());
                 }
             }
 
             return false;
+        }
+
+        private void waitForLockRelease(long remainingTimeoutMs) throws InterruptedException {
+            if (waitStrategy != null) {
+                waitStrategy.waitForRelease(writeLockKey, Duration.ofMillis(Math.max(remainingTimeoutMs, 1)));
+            } else {
+                Thread.sleep(config.getRetryDelay().toMillis());
+            }
         }
 
         @Override
@@ -236,27 +296,26 @@ public class RedlockReadWriteLock implements ReadWriteLock {
         }
 
         private boolean isWriteLockHeld() {
-            // Check if write lock exists on a quorum of nodes using GET
-            int nodesWithoutWriteLock = 0;
-            for (RedisDriver driver : redisDrivers) {
+            // Check if write lock exists on nodes using GET
+            // Use execution strategy to check on appropriate nodes
+            int nodesWithoutWriteLock = executionStrategy.executeOnNodes(driver -> {
                 try {
                     String value = driver.get(writeLockKey);
-                    if (value == null) {
-                        nodesWithoutWriteLock++;
-                    }
+                    return value == null; // Return true if no write lock
                 } catch (Exception e) {
                     logger.debug("Failed to check write lock on {}: {}", driver.getIdentifier(), e.getMessage());
+                    return false;
                 }
-            }
-            // If a quorum of nodes don't have the write lock, it's not held
-            return nodesWithoutWriteLock < config.getQuorum();
+            });
+            // If enough nodes don't have the write lock, it's not held
+            return !executionStrategy.isSuccessful(nodesWithoutWriteLock);
         }
 
         private boolean incrementReaderCount(String lockValue) {
             // Use Redis INCR to atomically increment the reader count
-            int successfulNodes = 0;
-
-            for (RedisDriver driver : redisDrivers) {
+            // Use execution strategy to increment on appropriate nodes
+            long lockTimeoutMs = config.getDefaultLockTimeout().toMillis();
+            int successfulNodes = executionStrategy.executeOnNodes(driver -> {
                 try {
                     // Increment the reader count atomically
                     long count = driver.incr(readCountKey);
@@ -264,25 +323,27 @@ public class RedlockReadWriteLock implements ReadWriteLock {
                     // Set expiration on the counter key to prevent leaks
                     if (count == 1) {
                         // First reader, set expiration
-                        driver.setex(readCountKey, String.valueOf(count), config.getDefaultLockTimeoutMs() * 2);
+                        driver.setex(readCountKey, String.valueOf(count), lockTimeoutMs * 2);
                     }
 
                     // Store the lock value for this reader
-                    driver.setex(readCountKey + ":" + lockValue, "1", config.getDefaultLockTimeoutMs());
+                    driver.setex(readCountKey + ":" + lockValue, "1", lockTimeoutMs);
 
-                    successfulNodes++;
                     logger.debug("Incremented reader count to {} on {}", count, driver.getIdentifier());
+                    return true;
                 } catch (Exception e) {
                     logger.debug("Failed to increment reader count on {}: {}", driver.getIdentifier(), e.getMessage());
+                    return false;
                 }
-            }
+            });
 
-            return successfulNodes >= config.getQuorum();
+            return executionStrategy.isSuccessful(successfulNodes);
         }
 
         private void decrementReaderCount(String lockValue) {
             // Use Redis DECR to atomically decrement the reader count
-            for (RedisDriver driver : redisDrivers) {
+            // Use execution strategy to decrement on appropriate nodes
+            executionStrategy.executeOnNodes(driver -> {
                 try {
                     // Decrement the reader count atomically
                     long count = driver.decr(readCountKey);
@@ -296,10 +357,12 @@ public class RedlockReadWriteLock implements ReadWriteLock {
                     }
 
                     logger.debug("Decremented reader count to {} on {}", count, driver.getIdentifier());
+                    return true;
                 } catch (Exception e) {
                     logger.warn("Failed to decrement reader count on {}: {}", driver.getIdentifier(), e.getMessage());
+                    return false;
                 }
-            }
+            });
         }
 
         private String generateLockValue() {
@@ -322,19 +385,24 @@ public class RedlockReadWriteLock implements ReadWriteLock {
      * Write lock implementation that provides exclusive access. Writers must wait for all readers to finish before
      * acquiring the lock.
      */
-    private static class WriteLock implements Lock {
+    public static class WriteLock implements Lock {
         private static final Logger logger = LoggerFactory.getLogger(WriteLock.class);
 
         private final Redlock underlyingLock;
         private final String readCountKey;
         private final List<RedisDriver> redisDrivers;
         private final RedlockConfiguration config;
+        private final LockWaitStrategy waitStrategy;
+        private final LockExecutionStrategy executionStrategy;
 
-        WriteLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
-            this.underlyingLock = new Redlock(resourceKey + ":write", redisDrivers, config);
+        WriteLock(String resourceKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+                LockWaitStrategy waitStrategy) {
+            this.underlyingLock = new Redlock(resourceKey + ":write", redisDrivers, config, waitStrategy);
             this.readCountKey = resourceKey + ":readers";
             this.redisDrivers = redisDrivers;
             this.config = config;
+            this.waitStrategy = waitStrategy;
+            this.executionStrategy = LockExecutionStrategyFactory.create(redisDrivers, config);
         }
 
         @Override
@@ -362,24 +430,37 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
         @Override
         public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
-            long timeoutMs = unit.toMillis(time);
-            long startTime = System.currentTimeMillis();
+            return tryLock(Duration.ofNanos(unit.toNanos(time)));
+        }
+
+        /**
+         * Attempts to acquire the write lock within the given timeout.
+         *
+         * @param timeout
+         *            the maximum time to wait for the lock
+         * @return true if the lock was acquired, false if the timeout elapsed
+         * @throws InterruptedException
+         *             if the current thread is interrupted
+         */
+        public boolean tryLock(Duration timeout) throws InterruptedException {
+            Instant deadline = Instant.now().plus(timeout);
 
             // Wait for readers to finish with timeout
             while (hasActiveReaders()) {
-                if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
+                Duration remaining = Duration.between(Instant.now(), deadline);
+                if (!timeout.isZero() && remaining.isNegative()) {
                     logger.debug("Timeout waiting for readers to finish");
                     return false;
                 }
-                Thread.sleep(config.getRetryDelayMs());
+                Thread.sleep(config.getRetryDelay().toMillis());
             }
 
             // Try to acquire write lock with remaining time
-            long remainingTime = timeoutMs - (System.currentTimeMillis() - startTime);
-            if (remainingTime <= 0) {
+            Duration remaining = Duration.between(Instant.now(), deadline);
+            if (remaining.isNegative() || remaining.isZero()) {
                 return underlyingLock.tryLock();
             }
-            return underlyingLock.tryLock(remainingTime, TimeUnit.MILLISECONDS);
+            return underlyingLock.tryLock(remaining);
         }
 
         @Override
@@ -398,7 +479,7 @@ public class RedlockReadWriteLock implements ReadWriteLock {
         private void waitForReadersToFinish() {
             while (hasActiveReaders()) {
                 try {
-                    Thread.sleep(config.getRetryDelayMs());
+                    Thread.sleep(config.getRetryDelay().toMillis());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RedlockException("Interrupted while waiting for readers", e);
@@ -410,21 +491,19 @@ public class RedlockReadWriteLock implements ReadWriteLock {
          * Checks if there are active readers using atomic GET operation.
          */
         private boolean hasActiveReaders() {
-            int nodesWithoutReaders = 0;
-
-            for (RedisDriver driver : redisDrivers) {
+            // Use execution strategy to check reader count on appropriate nodes
+            int nodesWithoutReaders = executionStrategy.executeOnNodes(driver -> {
                 try {
                     String countStr = driver.get(readCountKey);
-                    if (countStr == null || Long.parseLong(countStr) <= 0) {
-                        nodesWithoutReaders++;
-                    }
+                    return countStr == null || Long.parseLong(countStr) <= 0;
                 } catch (Exception e) {
                     logger.debug("Failed to check reader count on {}: {}", driver.getIdentifier(), e.getMessage());
+                    return false;
                 }
-            }
+            });
 
-            // If a quorum of nodes have no readers, we can proceed
-            return nodesWithoutReaders < config.getQuorum();
+            // If enough nodes have no readers, we can proceed
+            return !executionStrategy.isSuccessful(nodesWithoutReaders);
         }
     }
 }
