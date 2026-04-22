@@ -151,6 +151,26 @@ Help improve documentation:
 - **Code comments** - Explain complex logic
 - **Examples** - Usage examples and tutorials
 
+### MkDocs Guide
+
+The project documentation site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/). Documentation files are located in the `docs/` directory.
+
+#### Extending the Guide
+
+1. Add or edit Markdown files in `docs/`
+2. Update navigation in `mkdocs.yml` under the `nav:` section
+3. Use [MkDocs Material features](https://squidfunk.github.io/mkdocs-material/reference/) like admonitions, tabs, and code annotations
+
+#### Local Preview (via Docker)
+
+```bash
+# Serve locally with live reload at http://127.0.0.1:8000
+docker run --rm -p 8000:8000 -v ${PWD}:/docs squidfunk/mkdocs-material
+
+# Build static site to site/ directory
+docker run --rm -v ${PWD}:/docs squidfunk/mkdocs-material build --strict
+```
+
 ## 🎯 Areas for Contribution
 
 We welcome contributions in:

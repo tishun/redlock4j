@@ -122,7 +122,7 @@ public class RxRedlockTest {
         RxRedlock rxLock = new AsyncRedlockImpl("test-rx", drivers, testConfig, Executors.newCachedThreadPool(),
                 scheduler);
 
-        assertEquals(0, rxLock.getRemainingValidityTime());
+        assertTrue(rxLock.getRemainingValidityTime().isZero());
     }
 
     @Test

@@ -91,7 +91,7 @@ public class AsyncLockExtensionTest {
         Boolean acquired = asyncLock.tryLockAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
         assertTrue(acquired);
 
-        long initialValidity = asyncLock.getRemainingValidityTime();
+        Duration initialValidity = asyncLock.getRemainingValidityTime();
 
         // Extend lock
         Boolean extended = asyncLock.extendAsync(Duration.ofSeconds(10)).toCompletableFuture().get(5, TimeUnit.SECONDS);
@@ -100,8 +100,8 @@ public class AsyncLockExtensionTest {
         assertTrue(asyncLock.isHeldByCurrentThread());
 
         // Validity time should be greater after extension
-        long newValidity = asyncLock.getRemainingValidityTime();
-        assertTrue(newValidity > initialValidity,
+        Duration newValidity = asyncLock.getRemainingValidityTime();
+        assertTrue(newValidity.compareTo(initialValidity) > 0,
                 "New validity (" + newValidity + ") should be greater than initial (" + initialValidity + ")");
 
         // Verify setIfValueMatches was called on all drivers

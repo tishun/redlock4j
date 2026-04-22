@@ -181,10 +181,10 @@ public class AsyncRxUsageExample {
     private static void startRxValidityMonitoring(RxRedlock rxLock) {
         System.out.println("📊 Starting RxJava validity monitoring...");
 
-        Observable<Long> validityObservable = rxLock.validityObservable(Duration.ofSeconds(1));
+        Observable<Duration> validityObservable = rxLock.validityObservable(Duration.ofSeconds(1));
 
         Disposable validityDisposable = validityObservable.take(3) // Take only 3 emissions
-                .subscribe(validityTime -> System.out.println("📊 RxJava validity: " + validityTime + "ms remaining"),
+                .subscribe(validityTime -> System.out.println("📊 RxJava validity: " + validityTime + " remaining"),
                         throwable -> System.err.println("❌ RxJava validity error: " + throwable.getMessage()),
                         () -> System.out.println("🏁 RxJava validity monitoring completed"));
     }
@@ -213,10 +213,10 @@ public class AsyncRxUsageExample {
 
                 // Use RxJava interface for monitoring
                 System.out.println("📊 Monitoring via RxJava interface...");
-                Observable<Long> validityObservable = combinedLock.validityObservable(Duration.ofMillis(500));
+                Observable<Duration> validityObservable = combinedLock.validityObservable(Duration.ofMillis(500));
 
                 Disposable monitoringDisposable = validityObservable.take(2).subscribe(
-                        validityTime -> System.out.println("📊 Combined lock validity: " + validityTime + "ms"),
+                        validityTime -> System.out.println("📊 Combined lock validity: " + validityTime),
                         throwable -> System.err.println("❌ Monitoring error: " + throwable.getMessage()), () -> {
                             System.out.println("🏁 Combined lock monitoring completed");
 

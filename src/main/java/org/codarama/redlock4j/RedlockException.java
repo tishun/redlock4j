@@ -6,6 +6,9 @@ package org.codarama.redlock4j;
 
 /**
  * Exception thrown by Redlock operations.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class RedlockException extends RuntimeException {
 

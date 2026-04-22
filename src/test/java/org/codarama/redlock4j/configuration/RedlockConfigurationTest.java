@@ -22,8 +22,8 @@ public class RedlockConfigurationTest {
 
         assertEquals(3, config.getRedisNodes().size());
         assertEquals(2, config.getQuorum()); // (3/2) + 1 = 2
-        assertEquals(Duration.ofSeconds(30).toMillis(), config.getDefaultLockTimeoutMs());
-        assertEquals(200, config.getRetryDelayMs());
+        assertEquals(Duration.ofSeconds(30), config.getDefaultLockTimeout());
+        assertEquals(Duration.ofMillis(200), config.getRetryDelay());
         assertEquals(3, config.getMaxRetryAttempts());
         assertEquals(0.01, config.getClockDriftFactor(), 0.001);
     }
@@ -36,11 +36,11 @@ public class RedlockConfigurationTest {
                 .clockDriftFactor(0.02).lockAcquisitionTimeout(Duration.ofSeconds(20)).build();
 
         assertEquals(3, config.getRedisNodes().size());
-        assertEquals(Duration.ofSeconds(60).toMillis(), config.getDefaultLockTimeoutMs());
-        assertEquals(500, config.getRetryDelayMs());
+        assertEquals(Duration.ofSeconds(60), config.getDefaultLockTimeout());
+        assertEquals(Duration.ofMillis(500), config.getRetryDelay());
         assertEquals(5, config.getMaxRetryAttempts());
         assertEquals(0.02, config.getClockDriftFactor(), 0.001);
-        assertEquals(Duration.ofSeconds(20).toMillis(), config.getLockAcquisitionTimeoutMs());
+        assertEquals(Duration.ofSeconds(20), config.getLockAcquisitionTimeout());
     }
 
     @Test

@@ -6,12 +6,13 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
@@ -19,12 +20,12 @@ import java.util.stream.Collectors;
 /**
  * A distributed multi-lock implementation that allows atomic acquisition of multiple resources. This prevents deadlocks
  * by always acquiring locks in a consistent order (lexicographically sorted by key).
- * 
+ *
  * <p>
  * The MultiLock is useful when you need to perform operations that span multiple resources and require exclusive access
  * to all of them simultaneously.
  * </p>
- * 
+ *
  * <p>
  * <b>Key Features:</b>
  * </p>
@@ -34,16 +35,16 @@ import java.util.stream.Collectors;
  * <li>All-or-nothing semantics: either all locks are acquired or none</li>
  * <li>Automatic cleanup on failure</li>
  * </ul>
- * 
+ *
  * <p>
  * <b>Example Usage:</b>
  * </p>
- * 
+ *
  * <pre>
  * {
  *     &#64;code
  *     MultiLock multiLock = new MultiLock(Arrays.asList("account:1", "account:2", "account:3"), redisDrivers, config);
- * 
+ *
  *     multiLock.lock();
  *     try {
  *         // All three accounts are now locked
@@ -53,33 +54,37 @@ import java.util.stream.Collectors;
  *     }
  * }
  * </pre>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
-public class MultiLock implements Lock {
+public class MultiLock extends AbstractRedlock implements Lock {
     private static final Logger logger = LoggerFactory.getLogger(MultiLock.class);
 
     private final List<String> lockKeys;
-    private final List<RedisDriver> redisDrivers;
-    private final RedlockConfiguration config;
-    private final SecureRandom secureRandom;
 
     // Thread-local storage for lock state
-    private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
+    private final ThreadLocal<MultiLockState> lockState = new ThreadLocal<>();
 
-    private static class LockState {
+    private static class MultiLockState {
         final Map<String, String> lockValues; // key -> lockValue
-        final long acquisitionTime;
-        final long validityTime;
+        final Instant acquisitionTime;
+        final Duration validityDuration;
         int holdCount;
 
-        LockState(Map<String, String> lockValues, long acquisitionTime, long validityTime) {
+        MultiLockState(Map<String, String> lockValues, Instant acquisitionTime, Duration validityDuration) {
             this.lockValues = new HashMap<>(lockValues);
             this.acquisitionTime = acquisitionTime;
-            this.validityTime = validityTime;
+            this.validityDuration = validityDuration;
             this.holdCount = 1;
         }
 
         boolean isValid() {
-            return System.currentTimeMillis() < acquisitionTime + validityTime;
+            return Instant.now().isBefore(getExpiryTime());
+        }
+
+        Instant getExpiryTime() {
+            return acquisitionTime.plus(validityDuration);
         }
 
         void incrementHoldCount() {
@@ -93,7 +98,7 @@ public class MultiLock implements Lock {
 
     /**
      * Creates a new MultiLock for the specified resources.
-     * 
+     *
      * @param lockKeys
      *            the keys to lock (will be sorted internally to prevent deadlocks)
      * @param redisDrivers
@@ -101,7 +106,9 @@ public class MultiLock implements Lock {
      * @param config
      *            the Redlock configuration
      */
-    public MultiLock(List<String> lockKeys, List<RedisDriver> redisDrivers, RedlockConfiguration config) {
+    public MultiLock(List<String> lockKeys, List<RedisDriver> redisDrivers, RedlockConfiguration config,
+            LockWaitStrategy waitStrategy) {
+        super(redisDrivers, config, waitStrategy);
         if (lockKeys == null || lockKeys.isEmpty()) {
             throw new IllegalArgumentException("Lock keys cannot be null or empty");
         }
@@ -109,17 +116,13 @@ public class MultiLock implements Lock {
         // Sort keys to ensure consistent ordering and prevent deadlocks
         this.lockKeys = lockKeys.stream().distinct().sorted().collect(Collectors.toList());
 
-        this.redisDrivers = redisDrivers;
-        this.config = config;
-        this.secureRandom = new SecureRandom();
-
         logger.debug("Created MultiLock for {} resources: {}", this.lockKeys.size(), this.lockKeys);
     }
 
     @Override
     public void lock() {
         try {
-            if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+            if (!tryLock(config.getLockAcquisitionTimeout())) {
                 throw new RedlockException("Failed to acquire multi-lock within timeout for keys: " + lockKeys);
             }
         } catch (InterruptedException e) {
@@ -130,7 +133,7 @@ public class MultiLock implements Lock {
 
     @Override
     public void lockInterruptibly() throws InterruptedException {
-        if (!tryLock(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        if (!tryLock(config.getLockAcquisitionTimeout())) {
             throw new RedlockException("Failed to acquire multi-lock within timeout for keys: " + lockKeys);
         }
     }
@@ -138,7 +141,7 @@ public class MultiLock implements Lock {
     @Override
     public boolean tryLock() {
         try {
-            return tryLock(0, TimeUnit.MILLISECONDS);
+            return tryLock(Duration.ZERO);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
@@ -146,9 +149,9 @@ public class MultiLock implements Lock {
     }
 
     @Override
-    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+    public boolean tryLock(Duration timeout) throws InterruptedException {
         // Check if current thread already holds the lock (reentrancy)
-        LockState currentState = lockState.get();
+        MultiLockState currentState = lockState.get();
         if (currentState != null && currentState.isValid()) {
             currentState.incrementHoldCount();
             logger.debug("Reentrant multi-lock acquisition for {} keys (hold count: {})", lockKeys.size(),
@@ -156,41 +159,50 @@ public class MultiLock implements Lock {
             return true;
         }
 
-        long timeoutMs = unit.toMillis(time);
-        long startTime = System.currentTimeMillis();
+        Instant deadline = Instant.now().plus(timeout);
 
-        for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
+        int attempt = 0;
+        while (true) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new InterruptedException();
             }
 
+            // Check if we've exceeded the timeout
+            Duration remaining = Duration.between(Instant.now(), deadline);
+            if (!timeout.isZero() && remaining.isNegative()) {
+                logger.debug("Multi-lock acquisition timeout exceeded for keys: {} after {} attempts", lockKeys,
+                        attempt);
+                return false;
+            }
+
             MultiLockResult result = attemptMultiLock();
             if (result.isAcquired()) {
-                lockState.set(
-                        new LockState(result.getLockValues(), System.currentTimeMillis(), result.getValidityTimeMs()));
+                lockState.set(new MultiLockState(result.getLockValues(), Instant.now(),
+                        Duration.ofMillis(result.getValidityTimeMs())));
                 logger.debug("Successfully acquired multi-lock for {} keys on attempt {}", lockKeys.size(),
                         attempt + 1);
                 return true;
             }
 
-            // Check if we've exceeded the timeout
-            if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
-                logger.debug("Multi-lock acquisition timeout exceeded for keys: {}", lockKeys);
-                break;
+            // For zero timeout (tryLock()), only try once
+            if (timeout.isZero()) {
+                logger.debug("Multi-lock for keys {} not available for immediate acquisition", lockKeys);
+                return false;
             }
 
             // Wait before retrying
-            if (attempt < config.getMaxRetryAttempts()) {
-                Thread.sleep(config.getRetryDelayMs());
+            remaining = Duration.between(Instant.now(), deadline);
+            if (!remaining.isNegative()) {
+                // Wait on the first lock key (any release might allow us to proceed)
+                waitForLockRelease(lockKeys.get(0), remaining.toMillis());
             }
+            attempt++;
         }
-
-        return false;
     }
 
     @Override
     public void unlock() {
-        LockState state = lockState.get();
+        MultiLockState state = lockState.get();
         if (state == null) {
             logger.warn("Attempting to unlock multi-lock but no lock state found for current thread");
             return;
@@ -215,31 +227,33 @@ public class MultiLock implements Lock {
         logger.debug("Successfully released multi-lock for {} keys", lockKeys.size());
     }
 
+    @Override
+    public Condition newCondition() {
+        throw new UnsupportedOperationException("Conditions are not supported by distributed multi-locks");
+    }
+
     /**
      * Attempts to acquire all locks atomically.
      */
     private MultiLockResult attemptMultiLock() {
         Map<String, String> lockValues = new HashMap<>();
-        long startTime = System.currentTimeMillis();
+        Instant startTime = Instant.now();
 
         // Generate unique lock values for each key
         for (String key : lockKeys) {
             lockValues.put(key, generateLockValue());
         }
 
-        // Try to acquire all locks on each Redis node
-        int successfulNodes = 0;
-        for (RedisDriver driver : redisDrivers) {
-            if (acquireAllOnNode(driver, lockValues)) {
-                successfulNodes++;
-            }
-        }
+        // Use execution strategy to acquire all locks on nodes
+        int successfulNodes = executionStrategy.executeOnNodes(driver -> acquireAllOnNode(driver, lockValues));
 
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-        long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
+        Duration elapsed = Duration.between(startTime, Instant.now());
+        // Use strategy to calculate validity time (handles single-node vs multi-node drift)
+        long validityTime = executionStrategy.calculateValidityTime(config.getDefaultLockTimeout().toMillis(),
+                elapsed.toMillis());
 
-        boolean acquired = successfulNodes >= config.getQuorum() && validityTime > 0;
+        // Use strategy to check if we have enough successful nodes
+        boolean acquired = executionStrategy.isSuccessful(successfulNodes) && validityTime > 0;
 
         if (!acquired) {
             // Release any locks we managed to acquire
@@ -259,7 +273,7 @@ public class MultiLock implements Lock {
             // Try to acquire each lock in order
             for (String key : lockKeys) {
                 String lockValue = lockValues.get(key);
-                if (driver.setIfNotExists(key, lockValue, config.getDefaultLockTimeoutMs())) {
+                if (driver.setIfNotExists(key, lockValue, config.getDefaultLockTimeout().toMillis())) {
                     acquiredKeys.add(key);
                 } else {
                     // Failed to acquire this lock, rollback
@@ -292,7 +306,8 @@ public class MultiLock implements Lock {
      * Releases all locks across all nodes.
      */
     private void releaseAllLocks(Map<String, String> lockValues) {
-        for (RedisDriver driver : redisDrivers) {
+        // Use execution strategy to release locks on all appropriate nodes
+        executionStrategy.executeOnNodes(driver -> {
             for (Map.Entry<String, String> entry : lockValues.entrySet()) {
                 try {
                     driver.deleteIfValueMatches(entry.getKey(), entry.getValue());
@@ -301,22 +316,8 @@ public class MultiLock implements Lock {
                             e.getMessage());
                 }
             }
-        }
-    }
-
-    private String generateLockValue() {
-        byte[] bytes = new byte[20];
-        secureRandom.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public Condition newCondition() {
-        throw new UnsupportedOperationException("Conditions are not supported by distributed multi-locks");
+            return true;
+        });
     }
 
     /**

@@ -240,22 +240,22 @@ public class ReentrantAsyncRedlockTest {
 
         // Acquire lock
         assertTrue(lock.tryLockAsync().toCompletableFuture().get(5, TimeUnit.SECONDS));
-        long firstValidityTime = lock.getRemainingValidityTime();
-        assertTrue(firstValidityTime > 0);
+        Duration firstValidityTime = lock.getRemainingValidityTime();
+        assertFalse(firstValidityTime.isZero());
 
         // Reentrant acquisition should not change validity time significantly
         assertTrue(lock.tryLockAsync().toCompletableFuture().get(5, TimeUnit.SECONDS));
-        long secondValidityTime = lock.getRemainingValidityTime();
-        assertTrue(secondValidityTime > 0);
+        Duration secondValidityTime = lock.getRemainingValidityTime();
+        assertFalse(secondValidityTime.isZero());
         // Should be approximately the same (allowing for small time differences)
-        assertTrue(Math.abs(firstValidityTime - secondValidityTime) < 1000);
+        assertTrue(Math.abs(firstValidityTime.toMillis() - secondValidityTime.toMillis()) < 1000);
 
         // Unlock both
         lock.unlockAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
-        assertTrue(lock.getRemainingValidityTime() > 0); // Still valid after first unlock
+        assertFalse(lock.getRemainingValidityTime().isZero()); // Still valid after first unlock
 
         lock.unlockAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
-        assertEquals(0, lock.getRemainingValidityTime()); // Should be 0 after final unlock
+        assertTrue(lock.getRemainingValidityTime().isZero()); // Should be zero after final unlock
     }
 
     @Test

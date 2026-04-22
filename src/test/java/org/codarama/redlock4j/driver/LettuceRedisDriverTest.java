@@ -238,4 +238,310 @@ public class LettuceRedisDriverTest {
         driver1.close();
         driver2.close();
     }
+
+    @Test
+    public void testZAddSuccess() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zadd(eq("test-key"), eq(1.0), eq("member1"))).thenReturn(1L);
+
+        boolean result = driver.zAdd("test-key", 1.0, "member1");
+
+        assertTrue(result);
+        verify(mockCommands).zadd("test-key", 1.0, "member1");
+    }
+
+    @Test
+    public void testZAddFailure() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zadd(eq("test-key"), eq(1.0), eq("member1"))).thenReturn(0L);
+
+        boolean result = driver.zAdd("test-key", 1.0, "member1");
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void testZRemSuccess() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zrem(eq("test-key"), eq("member1"))).thenReturn(1L);
+
+        boolean result = driver.zRem("test-key", "member1");
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void testZRange() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zrange(eq("test-key"), eq(0L), eq(10L))).thenReturn(java.util.Arrays.asList("a", "b", "c"));
+
+        java.util.List<String> result = driver.zRange("test-key", 0, 10);
+
+        assertEquals(3, result.size());
+        assertEquals("a", result.get(0));
+    }
+
+    @Test
+    public void testZRangeReturnsEmptyListWhenNull() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zrange(eq("test-key"), eq(0L), eq(10L))).thenReturn(null);
+
+        java.util.List<String> result = driver.zRange("test-key", 0, 10);
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testIncr() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.incr(eq("counter"))).thenReturn(42L);
+
+        long result = driver.incr("counter");
+
+        assertEquals(42, result);
+    }
+
+    @Test
+    public void testDecr() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.decr(eq("counter"))).thenReturn(41L);
+
+        long result = driver.decr("counter");
+
+        assertEquals(41, result);
+    }
+
+    @Test
+    public void testGet() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.get(eq("test-key"))).thenReturn("test-value");
+
+        String result = driver.get("test-key");
+
+        assertEquals("test-value", result);
+    }
+
+    @Test
+    public void testSetex() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        driver.setex("test-key", "test-value", 5000);
+
+        verify(mockCommands).psetex(eq("test-key"), eq(5000L), eq("test-value"));
+    }
+
+    @Test
+    public void testDel() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.del(eq("key1"), eq("key2"))).thenReturn(2L);
+
+        long result = driver.del("key1", "key2");
+
+        assertEquals(2, result);
+    }
+
+    @Test
+    public void testPublish() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.publish(eq("channel"), eq("message"))).thenReturn(5L);
+
+        long result = driver.publish("channel", "message");
+
+        assertEquals(5, result);
+    }
+
+    @Test
+    public void testConfigGet() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        java.util.Map<String, String> configMap = new java.util.HashMap<>();
+        configMap.put("maxmemory", "1gb");
+        when(mockCommands.configGet(eq("maxmemory"))).thenReturn(configMap);
+
+        String result = driver.configGet("maxmemory");
+
+        assertEquals("1gb", result);
+    }
+
+    @Test
+    public void testConfigGetReturnsNullWhenEmpty() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.configGet(eq("nonexistent"))).thenReturn(new java.util.HashMap<>());
+
+        String result = driver.configGet("nonexistent");
+
+        assertNull(result);
+    }
+
+    @Test
+    public void testConfigSet() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        driver.configSet("maxmemory", "2gb");
+
+        verify(mockCommands).configSet(eq("maxmemory"), eq("2gb"));
+    }
+
+    @Test
+    public void testDriverWithPasswordConfig() {
+        RedisNodeConfiguration authConfig = RedisNodeConfiguration.builder().host("localhost").port(6379)
+                .password("testpass").build();
+
+        driver = new LettuceRedisDriver(authConfig, mockRedisClient, mockConnection, mockCommands);
+
+        assertNotNull(driver);
+        assertEquals("redis://localhost:6379", driver.getIdentifier());
+    }
+
+    @Test
+    public void testDriverWithDatabaseConfig() {
+        RedisNodeConfiguration dbConfig = RedisNodeConfiguration.builder().host("localhost").port(6379).database(5)
+                .build();
+
+        driver = new LettuceRedisDriver(dbConfig, mockRedisClient, mockConnection, mockCommands);
+
+        assertNotNull(driver);
+    }
+
+    @Test
+    public void testIncrException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.incr(eq("counter"))).thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.incr("counter"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute INCR"));
+    }
+
+    @Test
+    public void testDecrException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.decr(eq("counter"))).thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.decr("counter"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute DECR"));
+    }
+
+    @Test
+    public void testGetException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.get(eq("test-key"))).thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.get("test-key"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute GET"));
+    }
+
+    @Test
+    public void testDelException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.del(eq("key1"))).thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.del("key1"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute DEL"));
+    }
+
+    @Test
+    public void testPublishException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.publish(eq("channel"), eq("message")))
+                .thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.publish("channel", "message"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute PUBLISH"));
+    }
+
+    @Test
+    public void testZAddException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zadd(eq("sorted-set"), eq(1.0), eq("member")))
+                .thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.zAdd("sorted-set", 1.0, "member"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute ZADD"));
+    }
+
+    @Test
+    public void testZRemException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zrem(eq("sorted-set"), eq("member")))
+                .thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.zRem("sorted-set", "member"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute ZREM"));
+    }
+
+    @Test
+    public void testZRangeException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zrange(eq("sorted-set"), eq(0L), eq(10L)))
+                .thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.zRange("sorted-set", 0, 10));
+
+        assertTrue(ex.getMessage().contains("Failed to execute ZRANGE"));
+    }
+
+    @Test
+    public void testConfigGetException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.configGet(eq("maxmemory"))).thenThrow(new RuntimeException("Redis connection failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.configGet("maxmemory"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute CONFIG GET"));
+    }
+
+    @Test
+    public void testConfigSetException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doThrow(new RuntimeException("Redis connection failed")).when(mockCommands).configSet(eq("maxmemory"),
+                eq("2gb"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class, () -> driver.configSet("maxmemory", "2gb"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute CONFIG SET"));
+    }
+
+    @Test
+    public void testSetexException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doThrow(new RuntimeException("Redis connection failed")).when(mockCommands).psetex(eq("test-key"), eq(5000L),
+                eq("value"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.setex("test-key", "value", 5000));
+
+        assertTrue(ex.getMessage().contains("Failed to execute SETEX"));
+    }
+
 }

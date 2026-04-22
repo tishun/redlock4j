@@ -71,10 +71,10 @@ public class RedlockReadWriteLockTest {
         when(mockDriver2.incr(anyString())).thenReturn(1L);
         when(mockDriver3.incr(anyString())).thenReturn(1L);
 
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
-        Lock readLock = rwLock.readLock();
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
+        RedlockReadWriteLock.ReadLock readLock = (RedlockReadWriteLock.ReadLock) rwLock.readLock();
 
-        boolean acquired = readLock.tryLock(1, TimeUnit.SECONDS);
+        boolean acquired = readLock.tryLock(Duration.ofSeconds(1));
 
         assertTrue(acquired);
         verify(mockDriver1, atLeastOnce()).incr(contains(":readers"));
@@ -87,10 +87,10 @@ public class RedlockReadWriteLockTest {
         when(mockDriver2.get(contains(":write"))).thenReturn("some-lock-value");
         when(mockDriver3.get(contains(":write"))).thenReturn(null);
 
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
-        Lock readLock = rwLock.readLock();
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
+        RedlockReadWriteLock.ReadLock readLock = (RedlockReadWriteLock.ReadLock) rwLock.readLock();
 
-        boolean acquired = readLock.tryLock(100, TimeUnit.MILLISECONDS);
+        boolean acquired = readLock.tryLock(Duration.ofMillis(100));
 
         assertFalse(acquired);
     }
@@ -109,10 +109,10 @@ public class RedlockReadWriteLockTest {
         when(mockDriver2.setIfNotExists(contains(":write"), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(contains(":write"), anyString(), anyLong())).thenReturn(true);
 
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
-        Lock writeLock = rwLock.writeLock();
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
+        RedlockReadWriteLock.WriteLock writeLock = (RedlockReadWriteLock.WriteLock) rwLock.writeLock();
 
-        boolean acquired = writeLock.tryLock(1, TimeUnit.SECONDS);
+        boolean acquired = writeLock.tryLock(Duration.ofSeconds(1));
 
         assertTrue(acquired);
     }
@@ -124,10 +124,10 @@ public class RedlockReadWriteLockTest {
         when(mockDriver2.get(contains(":readers"))).thenReturn("2");
         when(mockDriver3.get(contains(":readers"))).thenReturn(null);
 
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
-        Lock writeLock = rwLock.writeLock();
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
+        RedlockReadWriteLock.WriteLock writeLock = (RedlockReadWriteLock.WriteLock) rwLock.writeLock();
 
-        boolean acquired = writeLock.tryLock(100, TimeUnit.MILLISECONDS);
+        boolean acquired = writeLock.tryLock(Duration.ofMillis(100));
 
         assertFalse(acquired);
     }
@@ -136,7 +136,7 @@ public class RedlockReadWriteLockTest {
 
     @Test
     void shouldReturnSameLockInstances() {
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
 
         Lock read1 = rwLock.readLock();
         Lock read2 = rwLock.readLock();
@@ -149,13 +149,13 @@ public class RedlockReadWriteLockTest {
 
     @Test
     void shouldThrowOnNewConditionForReadLock() {
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
         assertThrows(UnsupportedOperationException.class, () -> rwLock.readLock().newCondition());
     }
 
     @Test
     void shouldThrowOnNewConditionForWriteLock() {
-        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig);
+        RedlockReadWriteLock rwLock = new RedlockReadWriteLock("test-rw", drivers, testConfig, null);
         assertThrows(UnsupportedOperationException.class, () -> rwLock.writeLock().newCondition());
     }
 }

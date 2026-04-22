@@ -68,7 +68,7 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // First acquisition
         assertTrue(lock.tryLock());
@@ -118,14 +118,14 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // First acquisition
-        assertTrue(lock.tryLock(1, TimeUnit.SECONDS));
+        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
         assertEquals(1, lock.getHoldCount());
 
         // Reentrant acquisition with timeout
-        assertTrue(lock.tryLock(1, TimeUnit.SECONDS));
+        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
         assertEquals(2, lock.getHoldCount());
 
         // Unlock both
@@ -145,7 +145,7 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock in main thread
         assertTrue(lock.tryLock());
@@ -177,7 +177,7 @@ public class ReentrantRedlockTest {
 
     @Test
     public void testUnlockWithoutLockDoesNotThrow() {
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Should not throw exception when unlocking without holding lock
         assertDoesNotThrow(() -> lock.unlock());
@@ -191,7 +191,7 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // First acquisition using lock()
         assertDoesNotThrow(() -> lock.lock());
@@ -215,7 +215,7 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // First acquisition using lockInterruptibly()
         assertDoesNotThrow(() -> lock.lockInterruptibly());
@@ -239,7 +239,7 @@ public class ReentrantRedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
         ExecutorService executor = Executors.newFixedThreadPool(3);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch completeLatch = new CountDownLatch(3);

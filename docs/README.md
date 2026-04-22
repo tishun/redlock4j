@@ -81,14 +81,17 @@ docs/
 │   ├── basic-usage.md          # Basic usage patterns
 │   ├── advanced-locking.md     # Advanced locking features
 │   ├── redis-clients.md        # Redis client configuration
-│   └── best-practices.md       # Best practices
+│   ├── architecture.md         # Architecture and wait strategies
+│   ├── best-practices.md       # Best practices
+│   └── benchmarks.md           # Performance benchmarks
 ├── api/
-│   ├── core.md                 # Core API reference
+│   ├── redlock-manager.md      # RedlockManager API reference
+│   ├── lock-types.md           # Lock types API reference
+│   ├── async-reactive.md       # Async & Reactive API reference
 │   └── configuration.md        # Configuration API reference
-├── development/
-│   ├── contributing.md         # Contributing guide
-│   └── release.md              # Release process
-└── comparison.md               # Comparison with Redisson
+└── development/
+    ├── contributing.md         # Contributing guide
+    └── release.md              # Release process
 ```
 
 ## Configuration

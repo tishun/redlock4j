@@ -12,6 +12,9 @@ import java.util.concurrent.CompletionStage;
 /**
  * Asynchronous distributed lock interface using CompletionStage for non-blocking operations. This interface provides
  * async alternatives to the standard Lock interface methods.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public interface AsyncRedlock {
 
@@ -58,10 +61,10 @@ public interface AsyncRedlock {
     /**
      * Gets the remaining validity time of the lock for the current thread. This is a synchronous operation as it only
      * checks local state.
-     * 
-     * @return remaining validity time in milliseconds, or 0 if not held or expired
+     *
+     * @return remaining validity time, or {@link Duration#ZERO} if not held or expired
      */
-    long getRemainingValidityTime();
+    Duration getRemainingValidityTime();
 
     /**
      * Gets the lock key.

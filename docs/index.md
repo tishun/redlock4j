@@ -8,14 +8,14 @@ Redlock4j provides a reliable distributed locking mechanism using Redis, impleme
 
 ## Key Features
 
-- **Pure [Redlock distributed locking algorithm](https://redis.io/docs/latest/develop/use/patterns/distributed-locks/)** - entirely based on Redis definition
-- **Multiple Redis Drivers**: Integrated supports for [Jedis](https://github.com/redis/jedis) and [Lettuce](https://github.com/redis/lettuce), extensible to other drivers
-- **Lightweight** - Minimum implementation, no extra scope outside locking
-- **Multi-interface API** - Supports standard [Lock](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html), as well as async and reactive APIs
-- **Advanced Locking**: Fair, multi & read-write locks, semaphores, and countdown latches
-- **Lock Extension**: Extend lock validity time without releasing and re-acquiring
-- **Atomic CAS/CAD**: Auto-detects native [Redis 8.4+ CAS/CAD commands](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.4-release-notes/) when available
-- **Java 8+** - Compatible with Java 8 and higher
+- **Flexible Deployment** - Works as a [full Redlock implementation](https://redlock4j.codarama.org/guide/configuration/#single-node-mode) with multiple Redis nodes for high availability, or as a [standalone distributed lock](https://redlock4j.codarama.org/guide/configuration/#single-node-mode) with a single Redis node
+- **Multiple Redis Drivers** - Integrated support for [Jedis](https://github.com/redis/jedis) and [Lettuce](https://github.com/redis/lettuce), extensible to other drivers
+- **[Keyspace Notifications](https://redis.io/docs/latest/develop/use/keyspace-notifications/)** - Uses Redis pub/sub for instant lock release detection (20-50x faster than polling under contention)
+- **Multi-interface API** - Supports standard `java.util.concurrent.locks.Lock` interface, as well as [async](https://redlock4j.codarama.org/guide/async-reactive/) and [reactive](https://redlock4j.codarama.org/guide/async-reactive/) APIs
+- **Advanced Locking Primitives** - [Fair locks](https://redlock4j.codarama.org/guide/lock-types/#fair-lock), [multi-locks](https://redlock4j.codarama.org/guide/lock-types/#multi-lock), [read-write locks](https://redlock4j.codarama.org/guide/lock-types/#read-write-lock), [semaphores](https://redlock4j.codarama.org/guide/lock-types/#semaphore), and [countdown latches](https://redlock4j.codarama.org/guide/lock-types/#countdown-latch)
+- **Lock Extension** - Extend lock validity time without releasing and re-acquiring
+- **Atomic CAS/CAD Detection** - Auto-detects and uses native [Redis 8.4+ CAS/CAD commands](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.4-release-notes/) when available
+- **Java 8+** - Compatible with Java 8 and higher, tested against Java 8, 11, 17, and 21
 
 ## Quick Example
 

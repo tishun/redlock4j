@@ -68,11 +68,11 @@ public class LockExtensionTest {
         when(mockDriver2.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());
-        long initialValidity = lock.getRemainingValidityTime();
+        Duration initialValidity = lock.getRemainingValidityTime();
 
         // Extend lock
         boolean extended = lock.extend(10000); // Extend by 10 seconds
@@ -81,8 +81,8 @@ public class LockExtensionTest {
         assertTrue(lock.isHeldByCurrentThread());
 
         // Validity time should be greater after extension
-        long newValidity = lock.getRemainingValidityTime();
-        assertTrue(newValidity > initialValidity,
+        Duration newValidity = lock.getRemainingValidityTime();
+        assertTrue(newValidity.compareTo(initialValidity) > 0,
                 "New validity (" + newValidity + ") should be greater than initial (" + initialValidity + ")");
 
         // Verify setIfValueMatches was called on all drivers
@@ -103,7 +103,7 @@ public class LockExtensionTest {
         when(mockDriver2.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());
@@ -127,7 +127,7 @@ public class LockExtensionTest {
         when(mockDriver2.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());
@@ -142,7 +142,7 @@ public class LockExtensionTest {
 
     @Test
     public void testExtendWithoutHoldingLock() {
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Try to extend without holding lock
         boolean extended = lock.extend(10000);
@@ -158,7 +158,7 @@ public class LockExtensionTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());
@@ -174,7 +174,7 @@ public class LockExtensionTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());
@@ -195,7 +195,7 @@ public class LockExtensionTest {
         when(mockDriver2.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock twice (reentrant)
         assertTrue(lock.tryLock());
@@ -231,7 +231,7 @@ public class LockExtensionTest {
                 .thenThrow(new RedisDriverException("Connection failed"));
         when(mockDriver3.setIfValueMatches(anyString(), anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock
         assertTrue(lock.tryLock());

@@ -6,8 +6,17 @@ package org.codarama.redlock4j;
 
 /**
  * Result of a lock acquisition attempt.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class LockResult {
+
+    /**
+     * A shared instance representing a failed lock acquisition.
+     */
+    public static final LockResult NOT_ACQUIRED = new LockResult(false, 0, null, 0, 0);
+
     private final boolean acquired;
     private final long validityTimeMs;
     private final String lockValue;

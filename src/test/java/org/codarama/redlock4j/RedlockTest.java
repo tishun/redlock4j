@@ -64,13 +64,13 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         boolean acquired = lock.tryLock();
 
         assertTrue(acquired);
         assertTrue(lock.isHeldByCurrentThread());
-        assertTrue(lock.getRemainingValidityTime() > 0);
+        assertFalse(lock.getRemainingValidityTime().isZero());
 
         // Verify all drivers were called
         verify(mockDriver1).setIfNotExists(eq("test-key"), anyString(), eq(30000L));
@@ -85,13 +85,13 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         boolean acquired = lock.tryLock();
 
         assertFalse(acquired);
         assertFalse(lock.isHeldByCurrentThread());
-        assertEquals(0, lock.getRemainingValidityTime());
+        assertTrue(lock.getRemainingValidityTime().isZero());
 
         // Verify cleanup - should try to delete the lock that was acquired
         verify(mockDriver1, atLeastOnce()).deleteIfValueMatches(eq("test-key"), anyString());
@@ -106,7 +106,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         boolean acquired = lock.tryLock(5, TimeUnit.SECONDS);
 
@@ -121,7 +121,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         long startTime = System.currentTimeMillis();
         boolean acquired = lock.tryLock(200, TimeUnit.MILLISECONDS);
@@ -139,7 +139,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         assertDoesNotThrow(lock::lock);
         assertTrue(lock.isHeldByCurrentThread());
@@ -152,7 +152,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
         RedlockException exception = assertThrows(RedlockException.class, () -> lock.lock());
 
         assertTrue(exception.getMessage().contains("Failed to acquire lock within timeout"));
@@ -165,7 +165,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         assertDoesNotThrow(lock::lockInterruptibly);
         assertTrue(lock.isHeldByCurrentThread());
@@ -178,12 +178,12 @@ public class RedlockTest {
         lenient().when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         lenient().when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Interrupt the current thread
         Thread.currentThread().interrupt();
 
-        assertThrows(InterruptedException.class, () -> lock.tryLock(1, TimeUnit.SECONDS));
+        assertThrows(InterruptedException.class, () -> lock.tryLock(Duration.ofSeconds(1)));
 
         // Clear interrupt flag
         Thread.interrupted();
@@ -196,14 +196,14 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
         assertTrue(lock.tryLock());
 
         // Now unlock
         lock.unlock();
 
         assertFalse(lock.isHeldByCurrentThread());
-        assertEquals(0, lock.getRemainingValidityTime());
+        assertTrue(lock.getRemainingValidityTime().isZero());
 
         // Verify unlock was called on all drivers
         verify(mockDriver1, atLeastOnce()).deleteIfValueMatches(eq("test-key"), anyString());
@@ -213,7 +213,7 @@ public class RedlockTest {
 
     @Test
     public void testUnlockWithoutLock() {
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Should not throw exception when unlocking without holding lock
         assertDoesNotThrow(lock::unlock);
@@ -229,7 +229,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         boolean acquired = lock.tryLock();
 
@@ -244,7 +244,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
         assertTrue(lock.tryLock());
 
         // Mock exception during unlock
@@ -259,7 +259,7 @@ public class RedlockTest {
 
     @Test
     public void testNewConditionThrowsUnsupportedOperation() {
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         assertThrows(UnsupportedOperationException.class, lock::newCondition);
     }
@@ -276,7 +276,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, shortConfig);
+        Redlock lock = new Redlock("test-key", drivers, shortConfig, null);
 
         assertTrue(lock.tryLock());
         assertTrue(lock.isHeldByCurrentThread());
@@ -285,7 +285,7 @@ public class RedlockTest {
         Thread.sleep(100);
 
         assertFalse(lock.isHeldByCurrentThread());
-        assertEquals(0, lock.getRemainingValidityTime());
+        assertTrue(lock.getRemainingValidityTime().isZero());
     }
 
     @Test
@@ -300,7 +300,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, shortConfig);
+        Redlock lock = new Redlock("test-key", drivers, shortConfig, null);
 
         assertTrue(lock.tryLock());
 
@@ -312,7 +312,7 @@ public class RedlockTest {
     }
 
     @Test
-    public void testRetryLogicWithEventualSuccess() throws RedisDriverException {
+    public void testRetryLogicWithEventualSuccess() throws RedisDriverException, InterruptedException {
         // Mock failure on first attempts, success on later attempt
         when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false) // First attempt fails
                 .thenReturn(true); // Second attempt succeeds
@@ -320,9 +320,10 @@ public class RedlockTest {
                 .thenReturn(true); // Second attempt succeeds
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
-        boolean acquired = lock.tryLock();
+        // Use tryLock with timeout to enable retries
+        boolean acquired = lock.tryLock(Duration.ofSeconds(5));
 
         assertTrue(acquired);
         assertTrue(lock.isHeldByCurrentThread());
@@ -342,7 +343,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         boolean acquired = lock.tryLock();
 
@@ -350,9 +351,9 @@ public class RedlockTest {
         assertTrue(lock.isHeldByCurrentThread());
 
         // Validity time should be reduced due to elapsed time and clock drift
-        long remainingTime = lock.getRemainingValidityTime();
-        assertTrue(remainingTime < 30000); // Should be less than full timeout
-        assertTrue(remainingTime > 0); // But still positive
+        Duration remainingTime = lock.getRemainingValidityTime();
+        assertTrue(remainingTime.compareTo(Duration.ofSeconds(30)) < 0); // Should be less than full timeout
+        assertFalse(remainingTime.isZero()); // But still positive
     }
 
     @Test
@@ -361,8 +362,8 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock1 = new Redlock("test-key", drivers, testConfig);
-        Redlock lock2 = new Redlock("test-key", drivers, testConfig);
+        Redlock lock1 = new Redlock("test-key", drivers, testConfig, null);
+        Redlock lock2 = new Redlock("test-key", drivers, testConfig, null);
 
         lock1.tryLock();
         lock2.tryLock();
@@ -380,7 +381,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         // Acquire lock in main thread
         assertTrue(lock.tryLock());
@@ -389,7 +390,7 @@ public class RedlockTest {
         // Check from another thread
         Thread otherThread = new Thread(() -> {
             assertFalse(lock.isHeldByCurrentThread());
-            assertEquals(0, lock.getRemainingValidityTime());
+            assertTrue(lock.getRemainingValidityTime().isZero());
         });
 
         otherThread.start();
@@ -406,7 +407,7 @@ public class RedlockTest {
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig);
+        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
 
         long startTime = System.currentTimeMillis();
         boolean acquired = lock.tryLock(0, TimeUnit.MILLISECONDS);

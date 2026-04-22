@@ -64,7 +64,7 @@ public class AsyncRedlockImplTest {
 
             // Verify lock state
             assertTrue(asyncLock.isHeldByCurrentThread(), "Lock should be held by current thread");
-            assertTrue(asyncLock.getRemainingValidityTime() > 0, "Lock should have remaining validity time");
+            assertFalse(asyncLock.getRemainingValidityTime().isZero(), "Lock should have remaining validity time");
             assertEquals("test-completion-stage-lock", asyncLock.getLockKey());
 
             // Test async unlock
@@ -133,11 +133,13 @@ public class AsyncRedlockImplTest {
             lockObserver.assertValue(true);
 
             // Test validity observable - start it immediately after lock acquisition
-            TestObserver<Long> validityObserver = rxLock.validityObservable(Duration.ofMillis(200)).take(2) // Take only
-                                                                                                            // 2
-                                                                                                            // emissions
-                                                                                                            // to be
-                                                                                                            // safe
+            TestObserver<Duration> validityObserver = rxLock.validityObservable(Duration.ofMillis(200)).take(2) // Take
+                                                                                                                // only
+                                                                                                                // 2
+                                                                                                                // emissions
+                                                                                                                // to
+                                                                                                                // be
+                                                                                                                // safe
                     .test();
 
             // Wait a bit for emissions
@@ -147,8 +149,8 @@ public class AsyncRedlockImplTest {
             assertFalse(validityObserver.values().isEmpty(), "Should have at least 1 validity emission");
 
             // All validity values should be positive
-            validityObserver.values()
-                    .forEach(validity -> assertTrue(validity > 0, "Validity time should be positive: " + validity));
+            validityObserver.values().forEach(
+                    validity -> assertFalse(validity.isZero(), "Validity time should be positive: " + validity));
 
             // Cleanup
             rxLock.unlockRx().test().await();
@@ -222,7 +224,7 @@ public class AsyncRedlockImplTest {
             assertTrue(combinedLock.isHeldByCurrentThread(), "Lock should be held");
 
             // Test validity observable
-            TestObserver<Long> validityObserver = combinedLock.validityObservable(Duration.ofMillis(200)).take(2)
+            TestObserver<Duration> validityObserver = combinedLock.validityObservable(Duration.ofMillis(200)).take(2)
                     .test();
 
             validityObserver.await(1, TimeUnit.SECONDS);

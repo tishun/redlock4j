@@ -13,28 +13,33 @@ import org.codarama.redlock4j.LockResult;
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.RedlockException;
 import org.codarama.redlock4j.driver.RedisDriver;
-import org.codarama.redlock4j.driver.RedisDriverException;
+import org.codarama.redlock4j.strategy.LockExecutionStrategy;
+import org.codarama.redlock4j.strategy.LockExecutionStrategyFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.*;
 
 /**
- * Implementation supporting both AsyncRedlock and AsyncRedlockImpl interfaces. Provides asynchronous CompletionStage
- * and RxJava reactive capabilities.
+ * Implementation supporting both AsyncRedlock and RxRedlock interfaces. Provides asynchronous CompletionStage and
+ * RxJava reactive capabilities.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
     private static final Logger logger = LoggerFactory.getLogger(AsyncRedlockImpl.class);
 
     private final String lockKey;
-    private final List<RedisDriver> redisDrivers;
     private final RedlockConfiguration config;
     private final SecureRandom secureRandom;
     private final ExecutorService executorService;
     private final ScheduledExecutorService scheduledExecutorService;
+    private final LockExecutionStrategy executionStrategy;
 
     // Shared lock state for async operations (not thread-local)
     private volatile LockStateInfo lockState;
@@ -44,19 +49,23 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
 
     private static class LockStateInfo {
         final String lockValue;
-        final long acquisitionTime;
-        final long validityTime;
+        final Instant acquisitionTime;
+        final Duration validityDuration;
         volatile int holdCount; // For reentrancy - volatile for thread safety
 
-        LockStateInfo(String lockValue, long acquisitionTime, long validityTime) {
+        LockStateInfo(String lockValue, Instant acquisitionTime, Duration validityDuration) {
             this.lockValue = lockValue;
             this.acquisitionTime = acquisitionTime;
-            this.validityTime = validityTime;
+            this.validityDuration = validityDuration;
             this.holdCount = 1; // Initial acquisition
         }
 
         boolean isValid() {
-            return System.currentTimeMillis() < acquisitionTime + validityTime;
+            return Instant.now().isBefore(acquisitionTime.plus(validityDuration));
+        }
+
+        Instant getExpiryTime() {
+            return acquisitionTime.plus(validityDuration);
         }
 
         synchronized void incrementHoldCount() {
@@ -71,11 +80,11 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
     public AsyncRedlockImpl(String lockKey, List<RedisDriver> redisDrivers, RedlockConfiguration config,
             ExecutorService executorService, ScheduledExecutorService scheduledExecutorService) {
         this.lockKey = lockKey;
-        this.redisDrivers = redisDrivers;
         this.config = config;
         this.secureRandom = new SecureRandom();
         this.executorService = executorService;
         this.scheduledExecutorService = scheduledExecutorService;
+        this.executionStrategy = LockExecutionStrategyFactory.create(redisDrivers, config);
     }
 
     // AsyncRedlock implementation (CompletionStage)
@@ -96,8 +105,8 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
                 lockStateSubject.onNext(LockState.ACQUIRING);
                 LockResult result = attemptLock();
                 if (result.isAcquired()) {
-                    lockState = new LockStateInfo(result.getLockValue(), System.currentTimeMillis(),
-                            result.getValidityTimeMs());
+                    lockState = new LockStateInfo(result.getLockValue(), Instant.now(),
+                            Duration.ofMillis(result.getValidityTimeMs()));
                     lockStateSubject.onNext(LockState.ACQUIRED);
                     logger.debug("Successfully acquired async lock {}", lockKey);
                     return true;
@@ -115,20 +124,17 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
 
     @Override
     public CompletionStage<Boolean> tryLockAsync(Duration timeout) {
-        long timeoutMs = timeout.toMillis();
-        long startTime = System.currentTimeMillis();
-
-        return tryLockWithRetryAsync(timeoutMs, startTime, 0);
+        return tryLockWithRetryAsync(timeout, Instant.now(), 0);
     }
 
-    private CompletionStage<Boolean> tryLockWithRetryAsync(long timeoutMs, long startTime, int attempt) {
+    private CompletionStage<Boolean> tryLockWithRetryAsync(Duration timeout, Instant startTime, int attempt) {
         return tryLockAsync().thenCompose(acquired -> {
             if (acquired) {
                 return CompletableFuture.completedFuture(true);
             }
 
             // Check timeout
-            if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
+            if (startTime.plus(timeout).isBefore(Instant.now())) {
                 return CompletableFuture.completedFuture(false);
             }
 
@@ -138,11 +144,12 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
             }
 
             // Schedule retry with delay
-            long delay = config.getRetryDelayMs() + ThreadLocalRandom.current().nextLong(config.getRetryDelayMs());
+            long retryDelayMs = config.getRetryDelay().toMillis();
+            long delay = retryDelayMs + ThreadLocalRandom.current().nextLong(retryDelayMs);
 
             CompletableFuture<Boolean> future = new CompletableFuture<>();
             scheduledExecutorService.schedule(() -> {
-                tryLockWithRetryAsync(timeoutMs, startTime, attempt + 1).whenComplete((result, throwable) -> {
+                tryLockWithRetryAsync(timeout, startTime, attempt + 1).whenComplete((result, throwable) -> {
                     if (throwable != null) {
                         future.completeExceptionally(throwable);
                     } else {
@@ -157,7 +164,7 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
 
     @Override
     public CompletionStage<Void> lockAsync() {
-        return tryLockAsync(Duration.ofMillis(config.getLockAcquisitionTimeoutMs())).thenCompose(acquired -> {
+        return tryLockAsync(config.getLockAcquisitionTimeout()).thenCompose(acquired -> {
             if (acquired) {
                 return CompletableFuture.completedFuture(null);
             } else {
@@ -223,9 +230,9 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
     }
 
     @Override
-    public Observable<Long> validityObservable(Duration checkInterval) {
+    public Observable<Duration> validityObservable(Duration checkInterval) {
         return Observable.interval(checkInterval.toMillis(), TimeUnit.MILLISECONDS, Schedulers.io())
-                .map(tick -> getRemainingValidityTime()).takeWhile(validity -> validity > 0);
+                .map(tick -> getRemainingValidityTime()).takeWhile(validity -> !validity.isZero());
     }
 
     @Override
@@ -252,13 +259,13 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
     }
 
     @Override
-    public long getRemainingValidityTime() {
+    public Duration getRemainingValidityTime() {
         LockStateInfo state = lockState;
         if (state == null) {
-            return 0;
+            return Duration.ZERO;
         }
-        long remaining = state.acquisitionTime + state.validityTime - System.currentTimeMillis();
-        return Math.max(0, remaining);
+        Duration remaining = Duration.between(Instant.now(), state.getExpiryTime());
+        return remaining.isNegative() ? Duration.ZERO : remaining;
     }
 
     @Override
@@ -291,40 +298,22 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
                 return false;
             }
 
-            long startTime = System.currentTimeMillis();
-            int successfulNodes = 0;
-            long additionalTimeMs = additionalTime.toMillis();
-            long newExpireTimeMs = config.getDefaultLockTimeoutMs() + additionalTimeMs;
+            Duration newExpireTime = config.getDefaultLockTimeout().plus(additionalTime);
 
-            // Try to extend the lock on all nodes using CAS operation
-            for (RedisDriver driver : redisDrivers) {
-                try {
-                    // Use setIfValueMatches to atomically extend only if lock value matches
-                    if (driver.setIfValueMatches(lockKey, state.lockValue, state.lockValue, newExpireTimeMs)) {
-                        successfulNodes++;
-                    }
-                } catch (RedisDriverException e) {
-                    logger.warn("Failed to extend lock on {}: {}", driver.getIdentifier(), e.getMessage());
-                }
-            }
-
-            long elapsedTime = System.currentTimeMillis() - startTime;
-            long driftTime = (long) (newExpireTimeMs * config.getClockDriftFactor()) + 2;
-            long newValidityTime = newExpireTimeMs - elapsedTime - driftTime;
-
-            boolean extended = successfulNodes >= config.getQuorum() && newValidityTime > 0;
+            // Delegate to execution strategy (SingleNode or MultiNode)
+            boolean extended = executionStrategy.extendLock(lockKey, state.lockValue, newExpireTime.toMillis());
 
             if (extended) {
+                // Calculate new validity time using strategy
+                long newValidityTimeMs = executionStrategy.calculateValidityTime(newExpireTime.toMillis(), 0);
+                Duration newValidityDuration = Duration.ofMillis(newValidityTimeMs);
                 // Update lock state with new validity time
-                LockStateInfo newState = new LockStateInfo(state.lockValue, System.currentTimeMillis(),
-                        newValidityTime);
+                LockStateInfo newState = new LockStateInfo(state.lockValue, Instant.now(), newValidityDuration);
                 newState.holdCount = state.holdCount; // Preserve hold count
                 lockState = newState;
-                logger.debug("Successfully extended async lock {} on {}/{} nodes (new validity: {}ms)", lockKey,
-                        successfulNodes, redisDrivers.size(), newValidityTime);
+                logger.debug("Successfully extended async lock {} (new validity: {})", lockKey, newValidityDuration);
             } else {
-                logger.debug("Failed to extend async lock {} - only {}/{} nodes succeeded (quorum: {})", lockKey,
-                        successfulNodes, redisDrivers.size(), config.getQuorum());
+                logger.debug("Failed to extend async lock {}", lockKey);
             }
 
             return extended;
@@ -335,42 +324,13 @@ public class AsyncRedlockImpl implements AsyncRedlock, RxRedlock {
 
     private LockResult attemptLock() {
         String lockValue = generateLockValue();
-        long startTime = System.currentTimeMillis();
-        int successfulNodes = 0;
-
-        // Try to acquire the lock on all nodes
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                if (driver.setIfNotExists(lockKey, lockValue, config.getDefaultLockTimeoutMs())) {
-                    successfulNodes++;
-                }
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to acquire lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
-
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-        long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
-
-        boolean acquired = successfulNodes >= config.getQuorum() && validityTime > 0;
-
-        if (!acquired) {
-            // Release any locks we managed to acquire
-            releaseLock(lockValue);
-        }
-
-        return new LockResult(acquired, validityTime, lockValue, successfulNodes, redisDrivers.size());
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        return executionStrategy.acquireLock(lockKey, lockValue, config.getDefaultLockTimeout().toMillis());
     }
 
     private void releaseLock(String lockValue) {
-        for (RedisDriver driver : redisDrivers) {
-            try {
-                driver.deleteIfValueMatches(lockKey, lockValue);
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to release lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
+        // Delegate to execution strategy (SingleNode or MultiNode)
+        executionStrategy.releaseLock(lockKey, lockValue);
     }
 
     private String generateLockValue() {

@@ -5,7 +5,6 @@
 package org.codarama.redlock4j.driver;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Abstraction over different Redis client libraries (Jedis, Lettuce). Provides the minimal interface needed for
@@ -19,6 +18,9 @@ import java.util.Set;
  * </ul>
  * The detection and selection happens automatically at driver initialization.
  * </p>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public interface RedisDriver extends AutoCloseable {
 
@@ -66,6 +68,42 @@ public interface RedisDriver extends AutoCloseable {
      * @return true if connected, false otherwise
      */
     boolean isConnected();
+
+    /**
+     * Checks if the connection is using RESP3 protocol.
+     *
+     * <p>
+     * RESP3 is required for keyspace notifications because it allows pub/sub push notifications on the same connection
+     * used for regular commands. RESP2 requires a dedicated connection for pub/sub which is blocked in subscription
+     * mode.
+     * </p>
+     *
+     * @return true if using RESP3, false if using RESP2
+     */
+    boolean isResp3();
+
+    /**
+     * Gets a configuration value from the Redis server.
+     *
+     * @param parameter
+     *            the configuration parameter name
+     * @return the configuration value, or null if not found
+     * @throws RedisDriverException
+     *             if there's an error communicating with Redis
+     */
+    String configGet(String parameter) throws RedisDriverException;
+
+    /**
+     * Sets a configuration value on the Redis server.
+     *
+     * @param parameter
+     *            the configuration parameter name
+     * @param value
+     *            the value to set
+     * @throws RedisDriverException
+     *             if there's an error communicating with Redis or if the CONFIG command is not permitted
+     */
+    void configSet(String parameter, String value) throws RedisDriverException;
 
     /**
      * Gets a human-readable identifier for this Redis instance.
@@ -152,19 +190,6 @@ public interface RedisDriver extends AutoCloseable {
      *             if there's an error communicating with Redis
      */
     List<String> zRange(String key, long start, long stop) throws RedisDriverException;
-
-    /**
-     * Returns the score of a member in a sorted set.
-     *
-     * @param key
-     *            the sorted set key
-     * @param member
-     *            the member to get the score for
-     * @return the score, or null if the member doesn't exist
-     * @throws RedisDriverException
-     *             if there's an error communicating with Redis
-     */
-    Double zScore(String key, String member) throws RedisDriverException;
 
     /**
      * Removes all members from a sorted set with scores less than or equal to the given score.

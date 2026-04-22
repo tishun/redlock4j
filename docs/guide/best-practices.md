@@ -297,6 +297,6 @@ performOperation();  // What if lock is null?
 
 ## Next Steps
 
-- [API Reference](../api/core.md) - Detailed API documentation
+- [API Reference](../api/redlock-manager.md) - Detailed API documentation
 - [Advanced Locking](advanced-locking.md) - Advanced features
 

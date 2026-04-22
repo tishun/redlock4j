@@ -12,6 +12,9 @@ import org.codarama.redlock4j.driver.JedisRedisDriver;
 import org.codarama.redlock4j.driver.LettuceRedisDriver;
 import org.codarama.redlock4j.driver.RedisDriver;
 import org.codarama.redlock4j.async.AsyncRedlockImpl;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
+import org.codarama.redlock4j.strategy.WaitStrategy;
+import org.codarama.redlock4j.strategy.WaitStrategyFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +27,9 @@ import java.util.concurrent.locks.Lock;
 
 /**
  * Factory for creating Redlock instances. Manages the lifecycle of Redis connections.
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class RedlockManager implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(RedlockManager.class);
@@ -37,6 +43,7 @@ public class RedlockManager implements AutoCloseable {
     private final DriverType driverType;
     private final ExecutorService executorService;
     private final ScheduledExecutorService scheduledExecutorService;
+    private final LockWaitStrategy waitStrategy;
     private volatile boolean closed = false;
 
     /**
@@ -76,7 +83,11 @@ public class RedlockManager implements AutoCloseable {
             return t;
         });
 
-        logger.info("Created RedlockManager with {} driver and {} Redis nodes", driverType, redisDrivers.size());
+        // Initialize wait strategy
+        this.waitStrategy = WaitStrategyFactory.create(config.getWaitStrategy(), redisDrivers, config.getRetryDelay());
+
+        logger.info("Created RedlockManager with {} driver, {} Redis nodes, and {} wait strategy", driverType,
+                redisDrivers.size(), config.getWaitStrategy());
     }
 
     private List<RedisDriver> createDrivers() {
@@ -129,11 +140,11 @@ public class RedlockManager implements AutoCloseable {
      *
      * @param lockKey
      *            the key to lock
-     * @return a new Lock instance
+     * @return a new Redlock instance
      * @throws RedlockException
      *             if the manager is closed
      */
-    public Lock createLock(String lockKey) {
+    public Redlock createLock(String lockKey) {
         if (closed) {
             throw new RedlockException("RedlockManager is closed");
         }
@@ -142,7 +153,7 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Lock key cannot be null or empty");
         }
 
-        return new Redlock(lockKey, redisDrivers, config);
+        return new Redlock(lockKey, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -212,6 +223,12 @@ public class RedlockManager implements AutoCloseable {
     /**
      * Creates a new distributed fair lock for the given key. Fair locks ensure FIFO ordering for lock acquisition.
      *
+     * <p>
+     * <b>Important:</b> FairLock performs significantly better with polling wait strategy. If you are using keyspace
+     * notifications (the default), consider switching to polling via
+     * {@link org.codarama.redlock4j.configuration.RedlockConfiguration.Builder#usePolling()}.
+     * </p>
+     *
      * @param lockKey
      *            the key to lock
      * @return a new FairLock instance
@@ -227,7 +244,14 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Lock key cannot be null or empty");
         }
 
-        return new FairLock(lockKey, redisDrivers, config);
+        if (waitStrategy.getType() == WaitStrategy.KEYSPACE_NOTIFICATIONS) {
+            logger.warn(
+                    "FairLock '{}' is using keyspace notifications which may cause poor performance. "
+                            + "Consider using .usePolling() in RedlockConfiguration for better FairLock throughput.",
+                    lockKey);
+        }
+
+        return new FairLock(lockKey, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -249,7 +273,7 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Lock keys cannot be null or empty");
         }
 
-        return new MultiLock(lockKeys, redisDrivers, config);
+        return new MultiLock(lockKeys, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -271,7 +295,7 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Resource key cannot be null or empty");
         }
 
-        return new RedlockReadWriteLock(resourceKey, redisDrivers, config);
+        return new RedlockReadWriteLock(resourceKey, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -299,7 +323,7 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Permits must be positive");
         }
 
-        return new RedlockSemaphore(semaphoreKey, permits, redisDrivers, config);
+        return new RedlockSemaphore(semaphoreKey, permits, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -327,7 +351,7 @@ public class RedlockManager implements AutoCloseable {
             throw new IllegalArgumentException("Count cannot be negative");
         }
 
-        return new RedlockCountDownLatch(latchKey, count, redisDrivers, config);
+        return new RedlockCountDownLatch(latchKey, count, redisDrivers, config, waitStrategy);
     }
 
     /**
@@ -403,6 +427,13 @@ public class RedlockManager implements AutoCloseable {
         } catch (InterruptedException e) {
             scheduledExecutorService.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+
+        // Close wait strategy
+        try {
+            waitStrategy.close();
+        } catch (Exception e) {
+            logger.warn("Error closing wait strategy: {}", e.getMessage());
         }
 
         // Close Redis drivers

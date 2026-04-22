@@ -1,0 +1,177 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.codarama</groupId>
+  <artifactId>redlock4j-benchmark</artifactId>
+  <version>1.1.0-SNAPSHOT</version>
+  <name>redlock4j-benchmark</name>
+  <description>Performance benchmarks for redlock4j distributed locking library</description>
+
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jedis.version>7.1.0</jedis.version>
+    <lettuce.version>7.1.0.RELEASE</lettuce.version>
+    <redisson.version>3.46.0</redisson.version>
+    <spring-integration.version>6.4.10</spring-integration.version>
+    <spring-data-redis.version>3.4.4</spring-data-redis.version>
+    <shedlock.version>7.7.0</shedlock.version>
+    <redpulsar.version>1.4.0</redpulsar.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
+    <slf4j.version>2.0.9</slf4j.version>
+    <!-- Default benchmark main class, override with -Dbenchmark.mainClass=... -->
+    <benchmark.mainClass>org.codarama.redlock4j.benchmark.FairLockBenchmarkMain</benchmark.mainClass>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Force Netty 4.2.x to match Lettuce 7.1.x -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>4.2.4.Final</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- redlock4j dependency -->
+    <dependency>
+      <groupId>org.codarama</groupId>
+      <artifactId>redlock4j</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- Redis clients -->
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+      <version>${jedis.version}</version>
+    </dependency>
+    
+    <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
+      <version>${lettuce.version}</version>
+    </dependency>
+
+    <!-- Redisson for comparison benchmarks -->
+    <dependency>
+      <groupId>org.redisson</groupId>
+      <artifactId>redisson</artifactId>
+      <version>${redisson.version}</version>
+    </dependency>
+
+    <!-- Spring Integration Redis for comparison benchmarks -->
+    <dependency>
+      <groupId>org.springframework.integration</groupId>
+      <artifactId>spring-integration-redis</artifactId>
+      <version>${spring-integration.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.data</groupId>
+      <artifactId>spring-data-redis</artifactId>
+      <version>${spring-data-redis.version}</version>
+    </dependency>
+
+    <!-- ShedLock for comparison benchmarks -->
+    <dependency>
+      <groupId>net.javacrumbs.shedlock</groupId>
+      <artifactId>shedlock-provider-redis-lettuce</artifactId>
+      <version>${shedlock.version}</version>
+    </dependency>
+
+    <!-- RedPulsar for comparison benchmarks -->
+    <dependency>
+      <groupId>com.himadieiev</groupId>
+      <artifactId>redpulsar-jedis</artifactId>
+      <version>${redpulsar.version}</version>
+    </dependency>
+
+    <!-- Testcontainers for Redis deployment -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <version>${testcontainers.version}</version>
+    </dependency>
+
+    <!-- Logging -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>1.4.14</version>
+    </dependency>
+
+    <!-- JSON for result serialization -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <version>2.17.0</version>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <source>17</source>
+          <target>17</target>
+        </configuration>
+      </plugin>
+
+      <!-- Exec plugin to run benchmarks -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <configuration>
+          <mainClass>${benchmark.mainClass}</mainClass>
+          <cleanupDaemonThreads>false</cleanupDaemonThreads>
+        </configuration>
+      </plugin>
+
+      <!-- Shade plugin to create executable JAR -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>org.codarama.redlock4j.benchmark.FairLockBenchmarkMain</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+

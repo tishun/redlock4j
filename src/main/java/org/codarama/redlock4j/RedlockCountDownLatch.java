@@ -6,17 +6,19 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
+import org.codarama.redlock4j.strategy.LockExecutionStrategy;
+import org.codarama.redlock4j.strategy.LockExecutionStrategyFactory;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
  * A distributed countdown latch that allows one or more threads to wait until a set of operations being performed in
@@ -74,6 +76,9 @@ import java.util.stream.Collectors;
  *     System.out.println("All services initialized!");
  * }
  * </pre>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
 public class RedlockCountDownLatch {
     private static final Logger logger = LoggerFactory.getLogger(RedlockCountDownLatch.class);
@@ -83,12 +88,14 @@ public class RedlockCountDownLatch {
     private final int initialCount;
     private final List<RedisDriver> redisDrivers;
     private final RedlockConfiguration config;
+    private final LockWaitStrategy waitStrategy;
+    private final LockExecutionStrategy executionStrategy;
     private final AtomicBoolean subscribed = new AtomicBoolean(false);
     private volatile CountDownLatch localLatch;
 
     /**
      * Creates a new distributed countdown latch.
-     * 
+     *
      * @param latchKey
      *            the key for this latch
      * @param count
@@ -97,9 +104,11 @@ public class RedlockCountDownLatch {
      *            the Redis drivers to use
      * @param config
      *            the Redlock configuration
+     * @param waitStrategy
+     *            the wait strategy to use
      */
     public RedlockCountDownLatch(String latchKey, int count, List<RedisDriver> redisDrivers,
-            RedlockConfiguration config) {
+            RedlockConfiguration config, LockWaitStrategy waitStrategy) {
         if (count < 0) {
             throw new IllegalArgumentException("Count cannot be negative");
         }
@@ -109,6 +118,8 @@ public class RedlockCountDownLatch {
         this.initialCount = count;
         this.redisDrivers = redisDrivers;
         this.config = config;
+        this.waitStrategy = waitStrategy;
+        this.executionStrategy = LockExecutionStrategyFactory.create(redisDrivers, config);
         this.localLatch = new CountDownLatch(1);
 
         // Initialize the latch count in Redis
@@ -133,22 +144,20 @@ public class RedlockCountDownLatch {
      *             if the current thread is interrupted while waiting
      */
     public void await() throws InterruptedException {
-        await(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
+        await(Duration.ofMillis(Long.MAX_VALUE));
     }
 
     /**
      * Causes the current thread to wait until the latch has counted down to zero, unless the specified waiting time
      * elapses.
-     * 
+     *
      * @param timeout
      *            the maximum time to wait
-     * @param unit
-     *            the time unit of the timeout
      * @return true if the count reached zero, false if the timeout elapsed
      * @throws InterruptedException
      *             if the current thread is interrupted while waiting
      */
-    public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
+    public boolean await(Duration timeout) throws InterruptedException {
         // Subscribe to notifications if not already subscribed
         subscribeToNotifications();
 
@@ -160,7 +169,7 @@ public class RedlockCountDownLatch {
         }
 
         // Wait on local latch with timeout (will be released by pub/sub notification)
-        boolean completed = localLatch.await(timeout, unit);
+        boolean completed = localLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
 
         if (completed) {
             logger.debug("Latch {} count reached zero via notification", latchKey);
@@ -184,33 +193,23 @@ public class RedlockCountDownLatch {
      * </p>
      */
     public void countDown() {
-        int quorum = config.getQuorum();
-        CountDownLatch quorumLatch = new CountDownLatch(1);
-        AtomicInteger successCount = new AtomicInteger(0);
+        // Use execution strategy to decrement on appropriate nodes
+        int successCount = executionStrategy.executeOnNodes(driver -> {
+            try {
+                // Atomic: decrement and publish if zero in single Lua script
+                long count = driver.decrAndPublishIfZero(latchKey, channelKey, "zero");
+                logger.debug("Decremented latch {} count to {} on {}", latchKey, count, driver.getIdentifier());
+                return true;
+            } catch (Exception e) {
+                logger.debug("Failed to decrement latch count on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
+            }
+        });
 
-        // Execute atomic decrement + conditional publish on all nodes in parallel
-        for (RedisDriver driver : redisDrivers) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    // Atomic: decrement and publish if zero in single Lua script
-                    long count = driver.decrAndPublishIfZero(latchKey, channelKey, "zero");
-                    logger.debug("Decremented latch {} count to {} on {}", latchKey, count, driver.getIdentifier());
-                    if (successCount.incrementAndGet() >= quorum) {
-                        quorumLatch.countDown(); // Signal quorum reached
-                    }
-                } catch (Exception e) {
-                    logger.debug("Failed to decrement latch count on {}: {}", driver.getIdentifier(), e.getMessage());
-                }
-            });
-        }
-
-        // Wait for quorum (not all nodes)
-        try {
-            quorumLatch.await();
-            logger.debug("Successfully decremented latch {} count on quorum", latchKey);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("Interrupted while decrementing latch {}", latchKey);
+        if (executionStrategy.isSuccessful(successCount)) {
+            logger.debug("Successfully decremented latch {} count on {} nodes", latchKey, successCount);
+        } else {
+            logger.warn("Failed to decrement latch {} count on sufficient nodes", latchKey);
         }
     }
 
@@ -224,40 +223,26 @@ public class RedlockCountDownLatch {
      * @return the current count
      */
     public long getCount() {
-        int quorum = config.getQuorum();
-        CountDownLatch quorumLatch = new CountDownLatch(1);
         List<Long> results = new ArrayList<>();
 
-        // Execute GET on all nodes in parallel
-        for (RedisDriver driver : redisDrivers) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    String countStr = driver.get(latchKey);
-                    if (countStr != null) {
-                        synchronized (results) {
-                            results.add(Long.parseLong(countStr));
-                            if (results.size() >= quorum) {
-                                quorumLatch.countDown(); // Signal quorum reached
-                            }
-                        }
+        // Use execution strategy to read count from appropriate nodes
+        executionStrategy.executeOnNodes(driver -> {
+            try {
+                String countStr = driver.get(latchKey);
+                if (countStr != null) {
+                    synchronized (results) {
+                        results.add(Long.parseLong(countStr));
                     }
-                } catch (Exception e) {
-                    logger.debug("Failed to read latch count from {}: {}", driver.getIdentifier(), e.getMessage());
                 }
-            });
-        }
-
-        // Wait for quorum (not all nodes)
-        try {
-            quorumLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("Interrupted while reading latch {} count", latchKey);
-            return 0;
-        }
+                return true;
+            } catch (Exception e) {
+                logger.debug("Failed to read latch count from {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
+            }
+        });
 
         synchronized (results) {
-            if (results.size() >= quorum) {
+            if (!results.isEmpty()) {
                 // Return average count
                 long totalCount = results.stream().mapToLong(Long::longValue).sum();
                 long avgCount = totalCount / results.size();
@@ -265,46 +250,32 @@ public class RedlockCountDownLatch {
             }
         }
 
-        logger.warn("Failed to read latch {} count from quorum of nodes", latchKey);
+        logger.warn("Failed to read latch {} count from nodes", latchKey);
         return 0; // Conservative fallback - assume completed
     }
 
     /**
-     * Initializes the latch count in Redis using parallel operations with early quorum return.
+     * Initializes the latch count in Redis.
      */
     private void initializeLatch(int count) {
         String countValue = String.valueOf(count);
-        long expirationMs = config.getDefaultLockTimeoutMs() * 10;
-        int quorum = config.getQuorum();
+        long expirationMs = config.getDefaultLockTimeout().toMillis() * 10;
 
-        // Latch to signal when quorum is reached
-        CountDownLatch quorumLatch = new CountDownLatch(1);
-        AtomicInteger successCount = new AtomicInteger(0);
+        // Use execution strategy to initialize on appropriate nodes
+        int successCount = executionStrategy.executeOnNodes(driver -> {
+            try {
+                driver.setex(latchKey, countValue, expirationMs);
+                return true;
+            } catch (Exception e) {
+                logger.warn("Failed to initialize latch on {}: {}", driver.getIdentifier(), e.getMessage());
+                return false;
+            }
+        });
 
-        // Execute initialization on all nodes in parallel
-        List<CompletableFuture<Boolean>> futures = new ArrayList<>(redisDrivers.size());
-        for (RedisDriver driver : redisDrivers) {
-            futures.add(CompletableFuture.supplyAsync(() -> {
-                try {
-                    driver.setex(latchKey, countValue, expirationMs);
-                    if (successCount.incrementAndGet() >= quorum) {
-                        quorumLatch.countDown(); // Signal quorum reached
-                    }
-                    return true;
-                } catch (Exception e) {
-                    logger.warn("Failed to initialize latch on {}: {}", driver.getIdentifier(), e.getMessage());
-                    return false;
-                }
-            }));
-        }
-
-        // Wait for quorum (not all nodes)
-        try {
-            quorumLatch.await();
-            logger.debug("Successfully initialized latch {} with count {} on quorum", latchKey, count);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("Interrupted while initializing latch {}", latchKey);
+        if (executionStrategy.isSuccessful(successCount)) {
+            logger.debug("Successfully initialized latch {} with count {} on {} nodes", latchKey, count, successCount);
+        } else {
+            logger.warn("Failed to initialize latch {} on sufficient nodes", latchKey);
         }
     }
 

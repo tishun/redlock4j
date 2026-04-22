@@ -53,6 +53,7 @@ public class RedlockCountDownLatchIntegrationTest {
                 .addRedisNode("localhost", redis2.getMappedPort(6379))
                 .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofSeconds(30))
                 .retryDelay(Duration.ofMillis(100)).maxRetryAttempts(5).lockAcquisitionTimeout(Duration.ofSeconds(10))
+                .usePolling() // Use polling for integration tests - more reliable than keyspace notifications
                 .build();
     }
 
@@ -122,7 +123,7 @@ public class RedlockCountDownLatchIntegrationTest {
             RedlockCountDownLatch latch = manager.createCountDownLatch("await-zero", 0);
 
             long start = System.currentTimeMillis();
-            boolean result = latch.await(5, TimeUnit.SECONDS);
+            boolean result = latch.await(Duration.ofSeconds(5));
             long elapsed = System.currentTimeMillis() - start;
 
             assertTrue(result, "await() should return true when count is 0");
@@ -170,7 +171,7 @@ public class RedlockCountDownLatchIntegrationTest {
             RedlockCountDownLatch latch = manager.createCountDownLatch("await-timeout", 5);
 
             long start = System.currentTimeMillis();
-            boolean result = latch.await(1, TimeUnit.SECONDS);
+            boolean result = latch.await(Duration.ofSeconds(1));
             long elapsed = System.currentTimeMillis() - start;
 
             assertFalse(result, "await() should return false on timeout");
@@ -285,14 +286,14 @@ public class RedlockCountDownLatchIntegrationTest {
 
             latch.countDown();
             latch.countDown();
-            assertTrue(latch.await(1, TimeUnit.SECONDS), "First await should complete");
+            assertTrue(latch.await(Duration.ofSeconds(1)), "First await should complete");
 
             latch.reset();
             assertEquals(2, latch.getCount());
 
             latch.countDown();
             latch.countDown();
-            assertTrue(latch.await(1, TimeUnit.SECONDS), "Second await should complete after reset");
+            assertTrue(latch.await(Duration.ofSeconds(1)), "Second await should complete after reset");
         }
     }
 
@@ -311,7 +312,7 @@ public class RedlockCountDownLatchIntegrationTest {
             latch.countDown();
             latch.countDown();
 
-            assertTrue(latch.await(1, TimeUnit.SECONDS), "Lettuce latch should work correctly");
+            assertTrue(latch.await(Duration.ofSeconds(1)), "Lettuce latch should work correctly");
         }
     }
 

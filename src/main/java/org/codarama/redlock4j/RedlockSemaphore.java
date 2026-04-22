@@ -6,18 +6,19 @@ package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
+import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A distributed semaphore implementation that limits the number of concurrent accesses to a shared resource. Unlike a
  * lock which allows only one holder, a semaphore allows a configurable number of permits.
- * 
+ *
  * <p>
  * <b>Key Features:</b>
  * </p>
@@ -27,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * <li>Blocks when no permits are available</li>
  * <li>Automatic permit release on timeout</li>
  * </ul>
- * 
+ *
  * <p>
  * <b>Use Cases:</b>
  * </p>
@@ -36,19 +37,19 @@ import java.util.concurrent.TimeUnit;
  * <li>Resource pooling: Limit concurrent database connections</li>
  * <li>Throttling: Control concurrent access to expensive operations</li>
  * </ul>
- * 
+ *
  * <p>
  * <b>Example Usage:</b>
  * </p>
- * 
+ *
  * <pre>
  * {
  *     &#64;code
  *     // Create a semaphore with 5 permits
  *     RedlockSemaphore semaphore = new RedlockSemaphore("api-limiter", 5, redisDrivers, config);
- * 
+ *
  *     // Acquire a permit
- *     if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+ *     if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
  *         try {
  *             // Perform rate-limited operation
  *             callExternalAPI();
@@ -58,38 +59,42 @@ import java.util.concurrent.TimeUnit;
  *     }
  * }
  * </pre>
+ *
+ * @since 1.0
+ * @author Tihomir Mateev
  */
-public class RedlockSemaphore {
+public class RedlockSemaphore extends AbstractRedlock {
     private static final Logger logger = LoggerFactory.getLogger(RedlockSemaphore.class);
 
     private final String semaphoreKey;
     private final int maxPermits;
-    private final List<RedisDriver> redisDrivers;
-    private final RedlockConfiguration config;
-    private final SecureRandom secureRandom;
 
     // Thread-local storage for permit state
     private final ThreadLocal<PermitState> permitState = new ThreadLocal<>();
 
     private static class PermitState {
         final List<String> permitIds; // IDs of acquired permits
-        final long acquisitionTime;
-        final long validityTime;
+        final Instant acquisitionTime;
+        final Duration validityDuration;
 
-        PermitState(List<String> permitIds, long acquisitionTime, long validityTime) {
+        PermitState(List<String> permitIds, Instant acquisitionTime, Duration validityDuration) {
             this.permitIds = new ArrayList<>(permitIds);
             this.acquisitionTime = acquisitionTime;
-            this.validityTime = validityTime;
+            this.validityDuration = validityDuration;
         }
 
         boolean isValid() {
-            return System.currentTimeMillis() < acquisitionTime + validityTime;
+            return Instant.now().isBefore(getExpiryTime());
+        }
+
+        Instant getExpiryTime() {
+            return acquisitionTime.plus(validityDuration);
         }
     }
 
     /**
      * Creates a new distributed semaphore.
-     * 
+     *
      * @param semaphoreKey
      *            the key for this semaphore
      * @param maxPermits
@@ -100,42 +105,40 @@ public class RedlockSemaphore {
      *            the Redlock configuration
      */
     public RedlockSemaphore(String semaphoreKey, int maxPermits, List<RedisDriver> redisDrivers,
-            RedlockConfiguration config) {
+            RedlockConfiguration config, LockWaitStrategy waitStrategy) {
+        super(redisDrivers, config, waitStrategy);
         if (maxPermits <= 0) {
             throw new IllegalArgumentException("Max permits must be positive");
         }
 
         this.semaphoreKey = semaphoreKey;
         this.maxPermits = maxPermits;
-        this.redisDrivers = redisDrivers;
-        this.config = config;
-        this.secureRandom = new SecureRandom();
 
         logger.debug("Created RedlockSemaphore {} with {} permits", semaphoreKey, maxPermits);
     }
 
     /**
      * Acquires a permit, blocking until one is available.
-     * 
+     *
      * @throws RedlockException
      *             if unable to acquire within the configured timeout
      */
     public void acquire() throws InterruptedException {
-        if (!tryAcquire(config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        if (!tryAcquire(config.getLockAcquisitionTimeout())) {
             throw new RedlockException("Failed to acquire semaphore permit within timeout: " + semaphoreKey);
         }
     }
 
     /**
      * Acquires the specified number of permits, blocking until they are available.
-     * 
+     *
      * @param permits
      *            the number of permits to acquire
      * @throws RedlockException
      *             if unable to acquire within the configured timeout
      */
     public void acquire(int permits) throws InterruptedException {
-        if (!tryAcquire(permits, config.getLockAcquisitionTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        if (!tryAcquire(permits, config.getLockAcquisitionTimeout())) {
             throw new RedlockException(
                     "Failed to acquire " + permits + " semaphore permits within timeout: " + semaphoreKey);
         }
@@ -143,12 +146,12 @@ public class RedlockSemaphore {
 
     /**
      * Acquires a permit if one is immediately available.
-     * 
+     *
      * @return true if a permit was acquired, false otherwise
      */
     public boolean tryAcquire() {
         try {
-            return tryAcquire(1, 0, TimeUnit.MILLISECONDS);
+            return tryAcquire(1, Duration.ZERO);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
@@ -157,29 +160,25 @@ public class RedlockSemaphore {
 
     /**
      * Acquires a permit, waiting up to the specified time if necessary.
-     * 
+     *
      * @param timeout
      *            the maximum time to wait
-     * @param unit
-     *            the time unit of the timeout
      * @return true if a permit was acquired, false if the timeout elapsed
      */
-    public boolean tryAcquire(long timeout, TimeUnit unit) throws InterruptedException {
-        return tryAcquire(1, timeout, unit);
+    public boolean tryAcquire(Duration timeout) throws InterruptedException {
+        return tryAcquire(1, timeout);
     }
 
     /**
      * Acquires the specified number of permits, waiting up to the specified time if necessary.
-     * 
+     *
      * @param permits
      *            the number of permits to acquire
      * @param timeout
      *            the maximum time to wait
-     * @param unit
-     *            the time unit of the timeout
      * @return true if the permits were acquired, false if the timeout elapsed
      */
-    public boolean tryAcquire(int permits, long timeout, TimeUnit unit) throws InterruptedException {
+    public boolean tryAcquire(int permits, Duration timeout) throws InterruptedException {
         if (permits <= 0 || permits > maxPermits) {
             throw new IllegalArgumentException("Invalid number of permits: " + permits);
         }
@@ -191,8 +190,7 @@ public class RedlockSemaphore {
             return false;
         }
 
-        long timeoutMs = unit.toMillis(timeout);
-        long startTime = System.currentTimeMillis();
+        Instant deadline = Instant.now().plus(timeout);
 
         for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
             if (Thread.currentThread().isInterrupted()) {
@@ -201,22 +199,23 @@ public class RedlockSemaphore {
 
             SemaphoreResult result = attemptAcquire(permits);
             if (result.isAcquired()) {
-                permitState.set(
-                        new PermitState(result.getPermitIds(), System.currentTimeMillis(), result.getValidityTimeMs()));
+                permitState.set(new PermitState(result.getPermitIds(), Instant.now(),
+                        Duration.ofMillis(result.getValidityTimeMs())));
                 logger.debug("Successfully acquired {} permit(s) for {} on attempt {}", permits, semaphoreKey,
                         attempt + 1);
                 return true;
             }
 
             // Check if we've exceeded the timeout
-            if (timeoutMs > 0 && (System.currentTimeMillis() - startTime) >= timeoutMs) {
+            Duration remaining = Duration.between(Instant.now(), deadline);
+            if (!timeout.isZero() && remaining.isNegative()) {
                 logger.debug("Semaphore acquisition timeout exceeded for {}", semaphoreKey);
                 break;
             }
 
             // Wait before retrying
             if (attempt < config.getMaxRetryAttempts()) {
-                Thread.sleep(config.getRetryDelayMs());
+                waitForLockRelease(semaphoreKey, remaining.toMillis());
             }
         }
 
@@ -277,25 +276,18 @@ public class RedlockSemaphore {
      */
     private SemaphoreResult attemptAcquire(int permits) {
         List<String> permitIds = new ArrayList<>();
-        long startTime = System.currentTimeMillis();
+        Instant startTime = Instant.now();
 
         // Try to acquire permits by creating unique keys
         for (int i = 0; i < permits; i++) {
-            String permitId = generatePermitId();
+            String permitId = generateLockValue();
             String permitKey = semaphoreKey + ":permit:" + permitId;
 
-            int successfulNodes = 0;
-            for (RedisDriver driver : redisDrivers) {
-                try {
-                    if (driver.setIfNotExists(permitKey, permitId, config.getDefaultLockTimeoutMs())) {
-                        successfulNodes++;
-                    }
-                } catch (Exception e) {
-                    logger.debug("Failed to acquire permit on {}: {}", driver.getIdentifier(), e.getMessage());
-                }
-            }
+            // Use execution strategy to acquire permit on nodes
+            LockResult result = executionStrategy.acquireLock(permitKey, permitId,
+                    config.getDefaultLockTimeout().toMillis());
 
-            if (successfulNodes >= config.getQuorum()) {
+            if (result.isAcquired()) {
                 permitIds.add(permitId);
             } else {
                 // Failed to acquire this permit, rollback
@@ -304,9 +296,10 @@ public class RedlockSemaphore {
             }
         }
 
-        long elapsedTime = System.currentTimeMillis() - startTime;
-        long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-        long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
+        Duration elapsed = Duration.between(startTime, Instant.now());
+        // Use strategy to calculate validity time (handles single-node vs multi-node drift)
+        long validityTime = executionStrategy.calculateValidityTime(config.getDefaultLockTimeout().toMillis(),
+                elapsed.toMillis());
 
         boolean acquired = permitIds.size() == permits && validityTime > 0;
 
@@ -324,25 +317,9 @@ public class RedlockSemaphore {
     private void releasePermits(List<String> permitIds) {
         for (String permitId : permitIds) {
             String permitKey = semaphoreKey + ":permit:" + permitId;
-            for (RedisDriver driver : redisDrivers) {
-                try {
-                    driver.deleteIfValueMatches(permitKey, permitId);
-                } catch (Exception e) {
-                    logger.warn("Failed to release permit {} on {}: {}", permitId, driver.getIdentifier(),
-                            e.getMessage());
-                }
-            }
+            // Use execution strategy to release permit on all appropriate nodes
+            executionStrategy.releaseLock(permitKey, permitId);
         }
-    }
-
-    private String generatePermitId() {
-        byte[] bytes = new byte[16];
-        secureRandom.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     /**
