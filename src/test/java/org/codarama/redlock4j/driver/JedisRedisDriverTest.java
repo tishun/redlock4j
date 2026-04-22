@@ -105,4 +105,33 @@ public class JedisRedisDriverTest {
         driver = new JedisRedisDriver(config1);
         assertEquals("redis://redis1.example.com:6380", driver.getIdentifier());
     }
+
+    @Test
+    public void testIdentifierWithSpecialCharacters() {
+        RedisNodeConfiguration config = RedisNodeConfiguration.builder().host("my-redis-host.cluster.local").port(16379)
+                .connectionTimeoutMs(5000).socketTimeoutMs(5000).build();
+
+        driver = new JedisRedisDriver(config);
+        assertEquals("redis://my-redis-host.cluster.local:16379", driver.getIdentifier());
+    }
+
+    @Test
+    public void testDriverCreationWithAllOptions() {
+        RedisNodeConfiguration fullConfig = RedisNodeConfiguration.builder().host("redis.example.com").port(6380)
+                .password("secret").database(5).connectionTimeoutMs(10000).socketTimeoutMs(10000).build();
+
+        driver = new JedisRedisDriver(fullConfig);
+        assertNotNull(driver);
+        assertEquals("redis://redis.example.com:6380", driver.getIdentifier());
+    }
+
+    @Test
+    public void testDriverCreationWithDefaultTimeouts() {
+        RedisNodeConfiguration minimalConfig = RedisNodeConfiguration.builder().host("localhost").port(6379).build();
+
+        driver = new JedisRedisDriver(minimalConfig);
+        assertNotNull(driver);
+        assertEquals("redis://localhost:6379", driver.getIdentifier());
+    }
+
 }

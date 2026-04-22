@@ -4,13 +4,20 @@
  */
 package org.codarama.redlock4j.strategy;
 
+import org.codarama.redlock4j.RedlockException;
+import org.codarama.redlock4j.driver.RedisDriver;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for KeyspaceWaitStrategy helper methods.
@@ -127,5 +134,105 @@ class KeyspaceWaitStrategyTest {
         // Empty driver list should throw IllegalArgumentException
         assertThrows(IllegalArgumentException.class,
                 () -> strategy.initialize(Collections.emptyList(), Duration.ofMillis(50)));
+    }
+
+    @Test
+    void initialize_shouldConfigureKeyspaceNotifications() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        List<RedisDriver> drivers = Arrays.asList(mockDriver);
+
+        strategy.initialize(drivers, Duration.ofMillis(50));
+
+        verify(mockDriver).configSet(eq("notify-keyspace-events"), anyString());
+        strategy.close();
+    }
+
+    @Test
+    void initialize_shouldSkipConfigIfAlreadySet() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        List<RedisDriver> drivers = Arrays.asList(mockDriver);
+
+        strategy.initialize(drivers, Duration.ofMillis(50));
+
+        verify(mockDriver, never()).configSet(anyString(), anyString());
+        strategy.close();
+    }
+
+    @Test
+    void initialize_shouldThrowOnACLError() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("");
+        doThrow(new RuntimeException("NOPERM: ACL denied")).when(mockDriver).configSet(anyString(), anyString());
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        List<RedisDriver> drivers = Arrays.asList(mockDriver);
+
+        RedlockException ex = assertThrows(RedlockException.class,
+                () -> strategy.initialize(drivers, Duration.ofMillis(50)));
+
+        assertTrue(ex.getMessage().contains("CONFIG SET"));
+        strategy.close();
+    }
+
+    @Test
+    void waitForRelease_shouldThrowWhenClosed() {
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.close();
+
+        assertThrows(IllegalStateException.class, () -> strategy.waitForRelease("test-lock", Duration.ofMillis(100)));
+    }
+
+    @Test
+    void waitForRelease_shouldReturnTrueOnTimeout() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        // Wait should timeout and return true to allow retry
+        boolean result = strategy.waitForRelease("test-lock", Duration.ofMillis(50));
+        assertTrue(result);
+
+        strategy.close();
+    }
+
+    @Test
+    void close_shouldWakeUpWaitingThreads() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        // Start a waiting thread
+        Thread waiter = new Thread(() -> {
+            try {
+                strategy.waitForRelease("test-lock", Duration.ofSeconds(30));
+            } catch (Exception e) {
+                // Expected
+            }
+        });
+        waiter.start();
+
+        // Give thread time to start waiting
+        Thread.sleep(50);
+
+        // Close should wake up the waiting thread
+        strategy.close();
+
+        waiter.join(1000);
+        assertFalse(waiter.isAlive());
     }
 }

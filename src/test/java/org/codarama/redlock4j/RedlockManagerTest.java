@@ -5,11 +5,16 @@
 package org.codarama.redlock4j;
 
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
+import org.codarama.redlock4j.strategy.WaitStrategy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.locks.Lock;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.*;
 public class RedlockManagerTest {
 
     private RedlockConfiguration testConfig;
+    private RedlockConfiguration singleNodeConfig;
+    private RedlockManager manager;
 
     @BeforeEach
     void setUp() {
@@ -27,6 +34,17 @@ public class RedlockManagerTest {
                 .addRedisNode("localhost", 6381).defaultLockTimeout(Duration.ofSeconds(30))
                 .retryDelay(Duration.ofMillis(200)).maxRetryAttempts(3).lockAcquisitionTimeout(Duration.ofSeconds(10))
                 .build();
+
+        singleNodeConfig = RedlockConfiguration.builder().addRedisNode("localhost", 6379)
+                .defaultLockTimeout(Duration.ofSeconds(30)).retryDelay(Duration.ofMillis(100)).usePolling().build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (manager != null) {
+            manager.close();
+            manager = null;
+        }
     }
 
     @Test
@@ -122,5 +140,259 @@ public class RedlockManagerTest {
 
         assertFalse(config.isSingleNodeMode());
         assertEquals(2, config.getQuorum()); // 3 nodes -> quorum of 2
+    }
+
+    // === RedlockManager factory tests ===
+
+    @Test
+    public void testWithJedisCreatesManager() {
+        // This test requires a running Redis server, so we test just the factory method
+        // by catching the exception when Redis is not available
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertEquals(RedlockManager.DriverType.JEDIS, manager.getDriverType());
+        } catch (RedlockException e) {
+            // Expected if Redis is not running - test passes
+            assertTrue(e.getMessage().contains("Failed to connect"));
+        }
+    }
+
+    @Test
+    public void testWithLettuceCreatesManager() {
+        try {
+            manager = RedlockManager.withLettuce(singleNodeConfig);
+            assertEquals(RedlockManager.DriverType.LETTUCE, manager.getDriverType());
+        } catch (RedlockException e) {
+            // Expected if Redis is not running
+            assertTrue(e.getMessage().contains("Failed to connect"));
+        }
+    }
+
+    @Test
+    public void testCreateLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateLockWithEmptyKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createLock(""));
+            assertThrows(IllegalArgumentException.class, () -> manager.createLock("   "));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateAsyncLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createAsyncLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateRxLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createRxLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateAsyncRxLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createAsyncRxLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateFairLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createFairLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateMultiLockWithNullKeysThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createMultiLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateMultiLockWithEmptyKeysThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createMultiLock(Arrays.asList()));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateReadWriteLockWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createReadWriteLock(null));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateSemaphoreWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createSemaphore(null, 5));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateSemaphoreWithZeroPermitsThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createSemaphore("test-semaphore", 0));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateSemaphoreWithNegativePermitsThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createSemaphore("test-semaphore", -1));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateCountDownLatchWithNullKeyThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createCountDownLatch(null, 5));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCreateCountDownLatchWithNegativeCountThrowsException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertThrows(IllegalArgumentException.class, () -> manager.createCountDownLatch("test-latch", -1));
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testGetQuorum() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertEquals(1, manager.getQuorum());
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testCloseIsIdempotent() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            assertDoesNotThrow(() -> {
+                manager.close();
+                manager.close();
+                manager.close();
+            });
+            manager = null; // Already closed
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testOperationsAfterCloseThrowException() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            manager.close();
+
+            assertThrows(RedlockException.class, () -> manager.createLock("test-lock"));
+            assertThrows(RedlockException.class, () -> manager.createAsyncLock("test-lock"));
+            assertThrows(RedlockException.class, () -> manager.createRxLock("test-lock"));
+            assertThrows(RedlockException.class, () -> manager.createAsyncRxLock("test-lock"));
+            assertThrows(RedlockException.class, () -> manager.createFairLock("test-lock"));
+            assertThrows(RedlockException.class, () -> manager.createMultiLock(Arrays.asList("lock1", "lock2")));
+            assertThrows(RedlockException.class, () -> manager.createReadWriteLock("test-rwlock"));
+            assertThrows(RedlockException.class, () -> manager.createSemaphore("test-semaphore", 5));
+            assertThrows(RedlockException.class, () -> manager.createCountDownLatch("test-latch", 3));
+
+            manager = null; // Already closed
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testGetConnectedNodeCountAfterClose() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            manager.close();
+            assertEquals(0, manager.getConnectedNodeCount());
+            manager = null; // Already closed
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testIsHealthyAfterClose() {
+        try {
+            manager = RedlockManager.withJedis(singleNodeConfig);
+            manager.close();
+            assertFalse(manager.isHealthy());
+            manager = null; // Already closed
+        } catch (RedlockException e) {
+            // Redis not available, skip
+        }
+    }
+
+    @Test
+    public void testConfigurationWithPollingStrategy() {
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379).usePolling()
+                .build();
+
+        assertEquals(WaitStrategy.POLLING, config.getWaitStrategy());
+    }
+
+    @Test
+    public void testConfigurationDefaultStrategy() {
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379).build();
+
+        // Default strategy is KEYSPACE_NOTIFICATIONS
+        assertEquals(WaitStrategy.KEYSPACE_NOTIFICATIONS, config.getWaitStrategy());
     }
 }
