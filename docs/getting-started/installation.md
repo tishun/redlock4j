@@ -1,55 +1,49 @@
 # Installation
 
-## Maven
+=== "Maven"
 
-Add the following dependency to your `pom.xml`:
+    Add the following dependency to your `pom.xml`:
 
-```xml
-<dependency>
-    <groupId>org.codarama</groupId>
-    <artifactId>redlock4j</artifactId>
-    <version>1.1.0</version>
-</dependency>
-```
+    ```xml
+    <dependency>
+        <groupId>org.codarama</groupId>
+        <artifactId>redlock4j</artifactId>
+        <version>1.1.0</version>
+    </dependency>
 
-You'll also need to add a Redis client dependency. Redlock4j supports both Jedis and Lettuce:
+    <!-- Choose one Redis client -->
 
-### Using Jedis
+    <!-- For Jedis: -->
+    <dependency>
+        <groupId>redis.clients</groupId>
+        <artifactId>jedis</artifactId>
+        <version>7.1.0</version>
+    </dependency>
 
-```xml
-<dependency>
-    <groupId>redis.clients</groupId>
-    <artifactId>jedis</artifactId>
-    <version>7.1.0</version>
-</dependency>
-```
+    <!-- Or for Lettuce: -->
+    <dependency>
+        <groupId>io.lettuce</groupId>
+        <artifactId>lettuce-core</artifactId>
+        <version>7.1.0.RELEASE</version>
+    </dependency>
+    ```
 
-### Using Lettuce
+=== "Gradle"
 
-```xml
-<dependency>
-    <groupId>io.lettuce</groupId>
-    <artifactId>lettuce-core</artifactId>
-    <version>7.1.0.RELEASE</version>
-</dependency>
-```
+    Add the following to your `build.gradle`:
 
-## Gradle
+    ```groovy
+    dependencies {
+        implementation 'org.codarama:redlock4j:1.1.0'
 
-Add the following to your `build.gradle`:
+        // Choose one Redis client:
+        // For Jedis:
+        implementation 'redis.clients:jedis:7.1.0'
 
-```gradle
-dependencies {
-    implementation 'org.codarama:redlock4j:1.1.0'
-    
-    // Choose one Redis client:
-    // For Jedis:
-    implementation 'redis.clients:jedis:7.1.0'
-    
-    // Or for Lettuce:
-    implementation 'io.lettuce:lettuce-core:7.1.0.RELEASE'
-}
-```
+        // Or for Lettuce:
+        implementation 'io.lettuce:lettuce-core:7.1.0.RELEASE'
+    }
+    ```
 
 ## Requirements
 

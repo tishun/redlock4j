@@ -112,9 +112,8 @@ jobs:
         
     - name: Update Redis version in tests
       run: |
-        # Update the Redis image version in test files
-        sed -i 's/redis:7-alpine/redis:${{ matrix.redis-version }}/g' src/test/java/org/codarama/redlock4j/integration/RedlockIntegrationTest.java
-        sed -i 's/redis:7-alpine/redis:${{ matrix.redis-version }}/g' src/test/java/org/codarama/redlock4j/performance/RedlockPerformanceTest.java
+        # Update the Redis image version in integration test files
+        find src/test/java -name "*IntegrationTest.java" -exec sed -i 's/redis:7-alpine/redis:${{ matrix.redis-version }}/g' {} \;
         
     - name: Run integration tests with Redis ${{ matrix.redis-version }}
       run: mvn verify -Dmaven.test.skip.exec=false

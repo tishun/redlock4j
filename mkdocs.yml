@@ -80,6 +80,19 @@ nav:
     - Architecture: guide/architecture.md
     - Best Practices: guide/best-practices.md
     - Benchmarks: guide/benchmarks.md
+  - Locking Primitives:
+    - Redlock: primitives/redlock.md
+    - FairLock: primitives/fair-lock.md
+    - MultiLock: primitives/multi-lock.md
+    - ReadWriteLock: primitives/read-write-lock.md
+    - Semaphore: primitives/semaphore.md
+    - CountDownLatch: primitives/count-down-latch.md
+  - Comparison:
+    - FairLock: comparison/fairlock-implementation.md
+    - MultiLock: comparison/multilock-implementation.md
+    - ReadWriteLock: comparison/readwritelock-implementation.md
+    - Semaphore: comparison/semaphore-implementation.md
+    - CountDownLatch: comparison/countdownlatch-implementation.md
   - API Reference:
     - RedlockManager: api/redlock-manager.md
     - Lock Types: api/lock-types.md

@@ -2,144 +2,42 @@
 
 Redlock4j provides advanced distributed synchronization primitives beyond basic locks.
 
-## Fair Lock
+## Available Primitives
 
-Fair locks ensure FIFO ordering for lock acquisition, preventing thread starvation.
+| Primitive | Purpose | Details |
+|-----------|---------|---------|
+| [Redlock](../primitives/redlock.md) | Standard mutual exclusion | Quorum-based distributed lock |
+| [FairLock](../primitives/fair-lock.md) | FIFO ordering | Prevents starvation via sorted sets |
+| [MultiLock](../primitives/multi-lock.md) | Multi-resource locking | Deadlock-free atomic acquisition |
+| [ReadWriteLock](../primitives/read-write-lock.md) | Reader/writer pattern | Multiple readers OR single writer |
+| [Semaphore](../primitives/semaphore.md) | Permit-based limiting | Rate limiting, connection pools |
+| [CountDownLatch](../primitives/count-down-latch.md) | Coordination | Wait for N operations to complete |
 
-### Usage
+## Choosing the Right Primitive
 
-```java
-Lock fairLock = redlockManager.createFairLock("fair-resource");
-
-fairLock.lock();
-try {
-    // Critical section - guaranteed FIFO ordering
-    performWork();
-} finally {
-    fairLock.unlock();
-}
+```mermaid
+flowchart TD
+    A[Need distributed sync?] --> B{Single resource?}
+    B -->|Yes| C{Read-heavy?}
+    B -->|No| D[MultiLock]
+    C -->|Yes| E[ReadWriteLock]
+    C -->|No| F{Need fairness?}
+    F -->|Yes| G[FairLock]
+    F -->|No| H[Redlock]
+    A --> I{Rate limiting?}
+    I -->|Yes| J[Semaphore]
+    A --> K{Wait for N tasks?}
+    K -->|Yes| L[CountDownLatch]
 ```
 
-### Use Cases
-
-- High-contention scenarios requiring fairness
-- Preventing thread starvation
-- Maintaining request ordering in distributed systems
-
-## Multi-Lock
-
-Atomic acquisition of multiple resources simultaneously, preventing deadlocks.
-
-### Usage
-
-```java
-MultiLock multiLock = redlockManager.createMultiLock("resource-1", "resource-2", "resource-3");
-
-multiLock.lock();
-try {
-    // All resources locked atomically
-    processMultipleResources();
-} finally {
-    multiLock.unlock();
-}
-```
-
-### Use Cases
-
-- Database transactions across multiple tables
-- Coordinating access to multiple shared resources
-- Preventing circular wait deadlocks
-
-## Read-Write Lock
-
-Separate read and write locks for improved concurrency.
-
-### Usage
-
-```java
-ReadWriteLock rwLock = redlockManager.createReadWriteLock("shared-data");
-
-// Multiple readers can acquire simultaneously
-rwLock.readLock().lock();
-try {
-    // Read operation
-    data = readData();
-} finally {
-    rwLock.readLock().unlock();
-}
-
-// Writers get exclusive access
-rwLock.writeLock().lock();
-try {
-    // Write operation
-    writeData(newData);
-} finally {
-    rwLock.writeLock().unlock();
-}
-```
-
-### Use Cases
-
-- Read-heavy workloads
-- Caching scenarios
-- Shared configuration data
-
-## Distributed Semaphore
-
-Control access to a limited number of resources.
-
-### Usage
-
-```java
-Semaphore semaphore = redlockManager.createSemaphore("resource-pool", 5); // 5 permits
-
-semaphore.acquire();
-try {
-    // Use limited resource
-    useResource();
-} finally {
-    semaphore.release();
-}
-```
-
-### Use Cases
-
-- Connection pool management
-- Rate limiting
-- Resource quota enforcement
-
-## CountDownLatch
-
-Coordinate multiple distributed processes.
-
-### Usage
-
-```java
-CountDownLatch latch = redlockManager.createCountDownLatch("startup-latch", 3);
-
-// Worker threads
-latch.countDown();
-
-// Coordinator thread
-latch.await(); // Waits until count reaches 0
-```
-
-### Use Cases
-
-- Distributed initialization
-- Barrier synchronization
-- Coordinating parallel tasks
-
-## Best Practices
-
-### Choose the Right Primitive
-
-- **Basic Lock**: Simple mutual exclusion
-- **Fair Lock**: When ordering matters
-- **Multi-Lock**: Multiple resources needed atomically
-- **Read-Write Lock**: Read-heavy workloads
-- **Semaphore**: Limited resource pool
-- **CountDownLatch**: Coordination between processes
+| Scenario | Primitive |
+|----------|-----------|
+| Simple mutual exclusion | Redlock |
+| Order-sensitive requests | FairLock |
+| Multiple resources atomically | MultiLock |
+| Many readers, few writers | ReadWriteLock |
+| Limited resource pool | Semaphore |
+| Coordination barrier | CountDownLatch |
 
 ### Timeout Configuration
 
