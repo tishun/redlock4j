@@ -12,13 +12,13 @@
         <meta name="author" content="Codarama">
       
       
-        <link rel="canonical" href="https://codarama.github.io/redlock4j/guide/advanced-locking/">
+        <link rel="canonical" href="https://codarama.github.io/redlock4j/primitives/count-down-latch/">
       
       
-        <link rel="prev" href="../basic-usage/">
+        <link rel="prev" href="../semaphore/">
       
       
-        <link rel="next" href="../redis-clients/">
+        <link rel="next" href="../../comparison/fairlock-implementation/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Advanced Locking - Redlock4j</title>
+        <title>CountDownLatch - Redlock4j</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#advanced-locking" class="md-skip">
+        <a href="#countdownlatch-distributed-coordination" class="md-skip">
           Skip to content
         </a>
       
@@ -119,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Advanced Locking
+              CountDownLatch
             
           </span>
         </div>
@@ -269,13 +269,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../basic-usage/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../guide/basic-usage/" class="md-tabs__link">
           
   
   
@@ -291,11 +289,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../primitives/redlock/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../redlock/" class="md-tabs__link">
           
   
   
@@ -539,6 +539,235 @@
       
   
   
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/basic-usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Basic Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/advanced-locking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Locking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/redis-clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Redis Clients
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/best-practices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Best Practices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -560,17 +789,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    User Guide
+    Locking Primitives
   
 
     
@@ -581,12 +810,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
   
-    User Guide
+    Locking Primitives
   
 
           </label>
@@ -599,14 +828,126 @@
   
   
     <li class="md-nav__item">
-      <a href="../basic-usage/" class="md-nav__link">
+      <a href="../redlock/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Basic Usage
+    Redlock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fair-lock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FairLock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-lock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MultiLock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../read-write-lock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ReadWriteLock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../semaphore/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Semaphore
   
 
     
@@ -643,7 +984,7 @@
   <span class="md-ellipsis">
     
   
-    Advanced Locking
+    CountDownLatch
   
 
     
@@ -661,7 +1002,7 @@
   <span class="md-ellipsis">
     
   
-    Advanced Locking
+    CountDownLatch
   
 
     
@@ -687,10 +1028,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#available-primitives" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Primitives
+        Overview
       
     </span>
   </a>
@@ -698,22 +1039,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choosing-the-right-primitive" class="md-nav__link">
+  <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing the Right Primitive
+        How It Works
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Choosing the Right Primitive">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Concepts">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#timeout-configuration" class="md-nav__link">
+  <a href="#atomic-count-decrement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Timeout Configuration
+        Atomic Count Decrement
       
     </span>
   </a>
@@ -721,10 +1073,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#error-handling" class="md-nav__link">
+  <a href="#quorum-based-count" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Error Handling
+        Quorum-Based Count
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wait-mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wait Mechanism
       
     </span>
   </a>
@@ -737,10 +1100,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-considerations" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Performance Considerations
+        Usage
       
     </span>
   </a>
@@ -748,10 +1111,76 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#use-cases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Next Steps
+        Use Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-java-countdownlatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with Java CountDownLatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See Also
       
     </span>
   </a>
@@ -762,347 +1191,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../redis-clients/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Redis Clients
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../best-practices/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Best Practices
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarks/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarks
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
-        
-          
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Locking Primitives
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Locking Primitives
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/redlock/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Redlock
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/fair-lock/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    FairLock
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/multi-lock/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    MultiLock
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/read-write-lock/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ReadWriteLock
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/semaphore/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Semaphore
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../primitives/count-down-latch/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    CountDownLatch
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1516,10 +1604,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#available-primitives" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Primitives
+        Overview
       
     </span>
   </a>
@@ -1527,22 +1615,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choosing-the-right-primitive" class="md-nav__link">
+  <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing the Right Primitive
+        How It Works
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Choosing the Right Primitive">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Concepts">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#timeout-configuration" class="md-nav__link">
+  <a href="#atomic-count-decrement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Timeout Configuration
+        Atomic Count Decrement
       
     </span>
   </a>
@@ -1550,10 +1649,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#error-handling" class="md-nav__link">
+  <a href="#quorum-based-count" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Error Handling
+        Quorum-Based Count
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wait-mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wait Mechanism
       
     </span>
   </a>
@@ -1566,10 +1676,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-considerations" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Performance Considerations
+        Usage
       
     </span>
   </a>
@@ -1577,10 +1687,76 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#use-cases" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Next Steps
+        Use Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-java-countdownlatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with Java CountDownLatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See Also
       
     </span>
   </a>
@@ -1607,142 +1783,284 @@
   
 
 
-<h1 id="advanced-locking">Advanced Locking<a class="headerlink" href="#advanced-locking" title="Permanent link">&para;</a></h1>
-<p>Redlock4j provides advanced distributed synchronization primitives beyond basic locks.</p>
-<h2 id="available-primitives">Available Primitives<a class="headerlink" href="#available-primitives" title="Permanent link">&para;</a></h2>
+<h1 id="countdownlatch-distributed-coordination">CountDownLatch - Distributed Coordination<a class="headerlink" href="#countdownlatch-distributed-coordination" title="Permanent link">&para;</a></h1>
+<p>CountDownLatch allows threads to wait until a set of operations completes across distributed processes.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Primitive</th>
-<th>Purpose</th>
-<th>Details</th>
+<th>Property</th>
+<th>Value</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><a href="../../primitives/redlock/">Redlock</a></td>
-<td>Standard mutual exclusion</td>
-<td>Quorum-based distributed lock</td>
+<td><strong>Type</strong></td>
+<td>Coordination Barrier</td>
 </tr>
 <tr>
-<td><a href="../../primitives/fair-lock/">FairLock</a></td>
-<td>FIFO ordering</td>
-<td>Prevents starvation via sorted sets</td>
+<td><strong>Reusable</strong></td>
+<td>No (one-time use)</td>
 </tr>
 <tr>
-<td><a href="../../primitives/multi-lock/">MultiLock</a></td>
-<td>Multi-resource locking</td>
-<td>Deadlock-free atomic acquisition</td>
+<td><strong>Count Direction</strong></td>
+<td>Decrement only</td>
 </tr>
 <tr>
-<td><a href="../../primitives/read-write-lock/">ReadWriteLock</a></td>
-<td>Reader/writer pattern</td>
-<td>Multiple readers OR single writer</td>
-</tr>
-<tr>
-<td><a href="../../primitives/semaphore/">Semaphore</a></td>
-<td>Permit-based limiting</td>
-<td>Rate limiting, connection pools</td>
-</tr>
-<tr>
-<td><a href="../../primitives/count-down-latch/">CountDownLatch</a></td>
-<td>Coordination</td>
-<td>Wait for N operations to complete</td>
+<td><strong>Notification</strong></td>
+<td>Pub/Sub or polling</td>
 </tr>
 </tbody>
 </table>
-<h2 id="choosing-the-right-primitive">Choosing the Right Primitive<a class="headerlink" href="#choosing-the-right-primitive" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart TD
-    A[Need distributed sync?] --&gt; B{Single resource?}
-    B --&gt;|Yes| C{Read-heavy?}
-    B --&gt;|No| D[MultiLock]
-    C --&gt;|Yes| E[ReadWriteLock]
-    C --&gt;|No| F{Need fairness?}
-    F --&gt;|Yes| G[FairLock]
-    F --&gt;|No| H[Redlock]
-    A --&gt; I{Rate limiting?}
-    I --&gt;|Yes| J[Semaphore]
-    A --&gt; K{Wait for N tasks?}
-    K --&gt;|Yes| L[CountDownLatch]</code></pre>
+<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Main as Main Process
+    participant W1 as Worker 1
+    participant W2 as Worker 2
+    participant W3 as Worker 3
+    participant Redis as Redis
+
+    Main-&gt;&gt;Redis: SET latch:count 3
+    Note over Redis: count: 3
+    Main-&gt;&gt;Redis: SUBSCRIBE latch:channel
+    Note over Main: Waiting for count=0...
+
+    par Workers initialize in parallel
+        W1-&gt;&gt;W1: initializeService1()
+        W2-&gt;&gt;W2: initializeService2()
+        W3-&gt;&gt;W3: initializeService3()
+    end
+
+    W1-&gt;&gt;Redis: DECR latch:count
+    Redis--&gt;&gt;W1: 2
+    W1-&gt;&gt;Redis: PUBLISH latch:channel "countdown"
+    Note over Redis: count: 2
+
+    W3-&gt;&gt;Redis: DECR latch:count
+    Redis--&gt;&gt;W3: 1
+    W3-&gt;&gt;Redis: PUBLISH latch:channel "countdown"
+    Note over Redis: count: 1
+
+    W2-&gt;&gt;Redis: DECR latch:count
+    Redis--&gt;&gt;W2: 0
+    W2-&gt;&gt;Redis: PUBLISH latch:channel "released"
+    Note over Redis: count: 0
+
+    Redis--&gt;&gt;Main: "released"
+    Note over Main: All workers done!
+    Main-&gt;&gt;Main: proceedWithStartup()</code></pre>
+<h2 id="key-concepts">Key Concepts<a class="headerlink" href="#key-concepts" title="Permanent link">&para;</a></h2>
+<h3 id="atomic-count-decrement">Atomic Count Decrement<a class="headerlink" href="#atomic-count-decrement" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kd">local</span><span class="w"> </span><span class="nv">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">redis</span><span class="p">.</span><span class="nf">call</span><span class="p">(</span><span class="s2">&quot;DECR&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">latch_key</span><span class="p">)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kr">if</span><span class="w"> </span><span class="nv">count</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="kr">then</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nv">redis</span><span class="p">.</span><span class="nf">call</span><span class="p">(</span><span class="s2">&quot;PUBLISH&quot;</span><span class="p">,</span><span class="w"> </span><span class="nv">channel_key</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;released&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kr">end</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kr">return</span><span class="w"> </span><span class="nv">count</span>
+</code></pre></div>
+<h3 id="quorum-based-count">Quorum-Based Count<a class="headerlink" href="#quorum-based-count" title="Permanent link">&para;</a></h3>
+<p>In multi-node setup, count is maintained on majority of nodes:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Final count = median of all node counts
+</code></pre></div></p>
+<h3 id="wait-mechanism">Wait Mechanism<a class="headerlink" href="#wait-mechanism" title="Permanent link">&para;</a></h3>
+<p>Two strategies for waiting:
+1. <strong>Pub/Sub</strong> (default): Instant notification via Redis channels
+2. <strong>Polling</strong>: Periodic count checks (for restricted environments)</p>
+<div class="admonition note">
+<p class="admonition-title">Mode Differences</p>
+<p>The diagram above shows the conceptual flow. In <strong>multi-node mode</strong>:</p>
+<ul>
+<li>Count is maintained independently on each node</li>
+<li><code>countDown()</code> decrements on all nodes</li>
+<li><code>getCount()</code> returns the <strong>median</strong> value across nodes</li>
+<li>Latch releases when quorum of nodes reach zero</li>
+</ul>
+</div>
+<h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">// Create latch waiting for 3 operations</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">RedlockCountDownLatch</span><span class="w"> </span><span class="n">latch</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">redlockManager</span><span class="p">.</span><span class="na">createCountDownLatch</span><span class="p">(</span><span class="s">&quot;startup&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1">// Worker threads count down</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">initializeService1</span><span class="p">();</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="n">latch</span><span class="p">.</span><span class="na">countDown</span><span class="p">();</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="p">}).</span><span class="na">start</span><span class="p">();</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="n">initializeService2</span><span class="p">();</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="n">latch</span><span class="p">.</span><span class="na">countDown</span><span class="p">();</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">}).</span><span class="na">start</span><span class="p">();</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">    </span><span class="n">initializeService3</span><span class="p">();</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">    </span><span class="n">latch</span><span class="p">.</span><span class="na">countDown</span><span class="p">();</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="p">}).</span><span class="na">start</span><span class="p">();</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="c1">// Main thread waits</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">latch</span><span class="p">.</span><span class="na">await</span><span class="p">();</span><span class="w">  </span><span class="c1">// Blocks until count reaches 0</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;All services ready!&quot;</span><span class="p">);</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="c1">// Or wait with timeout</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">latch</span><span class="p">.</span><span class="na">await</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;All services ready!&quot;</span><span class="p">);</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;Timeout waiting for services&quot;</span><span class="p">);</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="use-cases">Use Cases<a class="headerlink" href="#use-cases" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Scenario</th>
-<th>Primitive</th>
+<th>Initial Count</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Simple mutual exclusion</td>
-<td>Redlock</td>
+<td>Service startup</td>
+<td>N services</td>
+<td>Wait for all to initialize</td>
 </tr>
 <tr>
-<td>Order-sensitive requests</td>
-<td>FairLock</td>
+<td>Batch processing</td>
+<td>N jobs</td>
+<td>Wait for all to complete</td>
 </tr>
 <tr>
-<td>Multiple resources atomically</td>
-<td>MultiLock</td>
+<td>Test coordination</td>
+<td>N threads</td>
+<td>Synchronize test execution</td>
 </tr>
 <tr>
-<td>Many readers, few writers</td>
-<td>ReadWriteLock</td>
-</tr>
-<tr>
-<td>Limited resource pool</td>
-<td>Semaphore</td>
-</tr>
-<tr>
-<td>Coordination barrier</td>
-<td>CountDownLatch</td>
+<td>Distributed workflow</td>
+<td>N stages</td>
+<td>Gate between stages</td>
 </tr>
 </tbody>
 </table>
-<h3 id="timeout-configuration">Timeout Configuration<a class="headerlink" href="#timeout-configuration" title="Permanent link">&para;</a></h3>
-<p>Always use timeouts to prevent indefinite blocking:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kt">boolean</span><span class="w"> </span><span class="n">acquired</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">lock</span><span class="p">.</span><span class="na">tryLock</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">);</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">acquired</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">        </span><span class="c1">// Critical section</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">        </span><span class="n">lock</span><span class="p">.</span><span class="na">unlock</span><span class="p">();</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="c1">// Handle timeout</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">}</span>
-</code></pre></div>
-<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
-<p>Properly handle failures:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">Lock</span><span class="w"> </span><span class="n">lock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="n">lock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">redlockManager</span><span class="p">.</span><span class="na">createLock</span><span class="p">(</span><span class="s">&quot;resource&quot;</span><span class="p">);</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="n">lock</span><span class="p">.</span><span class="na">lock</span><span class="p">();</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="c1">// Critical section</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="n">logger</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">&quot;Error in critical section&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">);</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">}</span><span class="w"> </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">lock</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">            </span><span class="n">lock</span><span class="p">.</span><span class="na">unlock</span><span class="p">();</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">            </span><span class="n">logger</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">&quot;Error releasing lock&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">);</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">        </span><span class="p">}</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="p">}</span>
-</code></pre></div>
-<h2 id="performance-considerations">Performance Considerations<a class="headerlink" href="#performance-considerations" title="Permanent link">&para;</a></h2>
+<h2 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>countDown()</code></td>
+<td>Decrement count by 1</td>
+</tr>
+<tr>
+<td><code>await()</code></td>
+<td>Wait indefinitely for count=0</td>
+</tr>
+<tr>
+<td><code>await(long, TimeUnit)</code></td>
+<td>Wait with timeout</td>
+</tr>
+<tr>
+<td><code>getCount()</code></td>
+<td>Current count value</td>
+</tr>
+</tbody>
+</table>
+<h2 id="supported-modes">Supported Modes<a class="headerlink" href="#supported-modes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Supported</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Single Node</strong></td>
+<td>✅</td>
+<td>Count on single instance</td>
+</tr>
+<tr>
+<td><strong>Multi-Node (Quorum)</strong></td>
+<td>✅</td>
+<td>Count averaged (median) across nodes</td>
+</tr>
+</tbody>
+</table>
+<p>In multi-node mode, <code>getCount()</code> returns the median value across all nodes for consistency.</p>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>initialCount</code></td>
+<td>(required)</td>
+<td>Starting count value</td>
+</tr>
+<tr>
+<td><code>latchTimeoutMs</code></td>
+<td>300000</td>
+<td>Latch expiration TTL</td>
+</tr>
+<tr>
+<td><code>useKeyspaceNotifications</code></td>
+<td>true</td>
+<td>Use Pub/Sub vs polling</td>
+</tr>
+</tbody>
+</table>
+<h2 id="comparison-with-java-countdownlatch">Comparison with Java CountDownLatch<a class="headerlink" href="#comparison-with-java-countdownlatch" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Java CDL</th>
+<th>Redlock CDL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope</td>
+<td>Single JVM</td>
+<td>Distributed</td>
+</tr>
+<tr>
+<td>Persistence</td>
+<td>Memory</td>
+<td>Redis</td>
+</tr>
+<tr>
+<td>Failure recovery</td>
+<td>Lost on crash</td>
+<td>Survives restarts</td>
+</tr>
+<tr>
+<td>Network partition</td>
+<td>N/A</td>
+<td>Quorum-based</td>
+</tr>
+</tbody>
+</table>
+<h2 id="when-to-use">When to Use<a class="headerlink" href="#when-to-use" title="Permanent link">&para;</a></h2>
+<p><strong>Good for:</strong>
+- Distributed service startup coordination
+- Batch job completion waiting
+- Multi-stage workflow gates
+- Cross-service synchronization</p>
+<p><strong>Not for:</strong>
+- Repeated coordination → use barriers or semaphores
+- Mutual exclusion → <a href="../redlock/">Redlock</a></p>
+<h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Fair locks</strong> have higher overhead than regular locks</li>
-<li><strong>Multi-locks</strong> require more Redis operations</li>
-<li><strong>Read-write locks</strong> optimize for read-heavy scenarios</li>
-<li><strong>Semaphores</strong> scale with permit count</li>
+<li><a href="../semaphore/">Semaphore</a> - Permit-based limiting</li>
+<li><a href="../redlock/">Redlock</a> - Mutual exclusion</li>
 </ul>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../best-practices/">Best Practices</a> - Follow recommended practices</li>
-<li><a href="../../api/redlock-manager/">API Reference</a> - Detailed API documentation</li>
-</ul>
-<p>For complete details, see <a href="https://github.com/codarama/redlock4j/blob/main/ADVANCED_LOCKING.md">ADVANCED_LOCKING.md</a> in the repository.</p>
 
 
 
@@ -1775,7 +2093,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="February 9, 2026 16:44:59 UTC">February 9, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="May 20, 2026 16:28:37 UTC">May 20, 2026</span>
   </span>
 
     

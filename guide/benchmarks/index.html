@@ -12,13 +12,13 @@
         <meta name="author" content="Codarama">
       
       
-        <link rel="canonical" href="https://codarama.github.io/redlock4j/getting-started/installation/">
+        <link rel="canonical" href="https://codarama.github.io/redlock4j/guide/benchmarks/">
       
       
-        <link rel="prev" href="../..">
+        <link rel="prev" href="../best-practices/">
       
       
-        <link rel="next" href="../quick-start/">
+        <link rel="next" href="../../primitives/redlock/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Installation - Redlock4j</title>
+        <title>Benchmarks - Redlock4j</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installation" class="md-skip">
+        <a href="#performance-benchmarks" class="md-skip">
           Skip to content
         </a>
       
@@ -119,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installation
+              Benchmarks
             
           </span>
         </div>
@@ -249,13 +249,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
           
   
   
@@ -271,11 +269,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../guide/basic-usage/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../basic-usage/" class="md-tabs__link">
           
   
   
@@ -422,31 +422,28 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
             
   
   
@@ -464,7 +461,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -479,37 +476,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Installation
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -525,59 +495,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Requirements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verifying-installation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Verifying Installation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -590,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quick-start/" class="md-nav__link">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
         
   
   
@@ -622,28 +539,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -661,7 +581,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -679,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/basic-usage/" class="md-nav__link">
+      <a href="../basic-usage/" class="md-nav__link">
         
   
   
@@ -707,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/advanced-locking/" class="md-nav__link">
+      <a href="../advanced-locking/" class="md-nav__link">
         
   
   
@@ -735,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/redis-clients/" class="md-nav__link">
+      <a href="../redis-clients/" class="md-nav__link">
         
   
   
@@ -763,7 +683,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/architecture/" class="md-nav__link">
+      <a href="../architecture/" class="md-nav__link">
         
   
   
@@ -791,7 +711,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/best-practices/" class="md-nav__link">
+      <a href="../best-practices/" class="md-nav__link">
         
   
   
@@ -816,10 +736,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../guide/benchmarks/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -835,6 +782,248 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#test-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#single-node-vs-multi-node-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single-Node vs Multi-Node Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Single-Node vs Multi-Node Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#distributed-lock-comparison-1-client-no-contention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distributed Lock Comparison (1 client, no contention)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lock-type-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lock Type Benchmarks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Lock Type Benchmarks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-basic-distributed-lock-redlock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Basic Distributed Lock (Redlock)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-fairlock-fifo-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. FairLock (FIFO Ordering)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-multilock-atomic-multi-resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. MultiLock (Atomic Multi-Resource)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-readwritelock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. ReadWriteLock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-semaphore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Semaphore
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-countdownlatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. CountDownLatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#throughput-opss-higher-is-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Throughput (ops/s) - Higher is Better
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#latency-avg-ms-lower-is-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latency (avg ms) - Lower is Better
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-takeaways" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Takeaways
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running Benchmarks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Benchmarks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Line Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Benchmark
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1477,10 +1666,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
+  <a href="#test-environment" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Requirements
+        Test Environment
       
     </span>
   </a>
@@ -1488,10 +1677,160 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#verifying-installation" class="md-nav__link">
+  <a href="#single-node-vs-multi-node-mode" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Verifying Installation
+        Single-Node vs Multi-Node Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Single-Node vs Multi-Node Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#distributed-lock-comparison-1-client-no-contention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distributed Lock Comparison (1 client, no contention)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lock-type-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lock Type Benchmarks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Lock Type Benchmarks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-basic-distributed-lock-redlock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Basic Distributed Lock (Redlock)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-fairlock-fifo-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. FairLock (FIFO Ordering)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-multilock-atomic-multi-resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. MultiLock (Atomic Multi-Resource)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-readwritelock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. ReadWriteLock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-semaphore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Semaphore
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-countdownlatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. CountDownLatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#throughput-opss-higher-is-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Throughput (ops/s) - Higher is Better
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#latency-avg-ms-lower-is-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latency (avg ms) - Lower is Better
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-takeaways" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Takeaways
       
     </span>
   </a>
@@ -1499,13 +1838,52 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#running-benchmarks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Next Steps
+        Running Benchmarks
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Running Benchmarks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Line Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Benchmark
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1529,78 +1907,535 @@
   
 
 
-<h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Maven</label><label for="__tabbed_1_2">Gradle</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p>Add the following dependency to your <code>pom.xml</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">&lt;dependency&gt;</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="nt">&lt;groupId&gt;</span>org.codarama<span class="nt">&lt;/groupId&gt;</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&lt;artifactId&gt;</span>redlock4j<span class="nt">&lt;/artifactId&gt;</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>1.1.0<span class="nt">&lt;/version&gt;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">&lt;/dependency&gt;</span>
+<h1 id="performance-benchmarks">Performance Benchmarks<a class="headerlink" href="#performance-benchmarks" title="Permanent link">&para;</a></h1>
+<p>This guide provides comprehensive performance comparisons between <strong>redlock4j</strong> and other Redis-based locking libraries.</p>
+<h2 id="test-environment">Test Environment<a class="headerlink" href="#test-environment" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis Nodes</td>
+<td>3 (Testcontainers)</td>
+</tr>
+<tr>
+<td>Redis Version</td>
+<td>7-alpine</td>
+</tr>
+<tr>
+<td>Work Simulation</td>
+<td>50ms per lock hold</td>
+</tr>
+<tr>
+<td>Lock Timeout</td>
+<td>30s</td>
+</tr>
+<tr>
+<td>Benchmark Duration</td>
+<td>1 minute per implementation</td>
+</tr>
+<tr>
+<td>JDK</td>
+<td>17</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="single-node-vs-multi-node-mode">Single-Node vs Multi-Node Mode<a class="headerlink" href="#single-node-vs-multi-node-mode" title="Permanent link">&para;</a></h2>
+<p>redlock4j automatically detects single-node deployments and uses an optimized <code>SingleNodeStrategy</code> that eliminates:</p>
+<ul>
+<li>Quorum calculations</li>
+<li>Clock drift compensation  </li>
+<li>Node iteration overhead</li>
+</ul>
+<h3 id="distributed-lock-comparison-1-client-no-contention">Distributed Lock Comparison (1 client, no contention)<a class="headerlink" href="#distributed-lock-comparison-1-client-no-contention" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Implementation</th>
+<th>Throughput (ops/s)</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>redlock4j-singlenode</strong></td>
+<td><strong>18.33</strong></td>
+<td>SingleNodeStrategy optimized</td>
+</tr>
+<tr>
+<td>ShedLock</td>
+<td>18.37</td>
+<td>Single node</td>
+</tr>
+<tr>
+<td>Spring Integration</td>
+<td>18.23</td>
+<td>Single node</td>
+</tr>
+<tr>
+<td>Redisson RLock</td>
+<td>18.32</td>
+<td>Single node</td>
+</tr>
+<tr>
+<td>RedPulsar</td>
+<td>18.26</td>
+<td>3-node Redlock</td>
+</tr>
+<tr>
+<td>redlock4j-3node</td>
+<td>17.60</td>
+<td>Full 3-node Redlock</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Finding</strong>: Single-node mode is <strong>competitive with other single-node implementations</strong> while retaining the ability to scale to multi-node Redlock when needed.</p>
+<blockquote>
+<p><strong>Note</strong>: Multi-client contention scenarios with 3-node Redlock show degraded performance due to the inherent cost of distributed consensus. For high-contention workloads, consider single-node mode or tuning retry delays.</p>
+</blockquote>
+<hr />
+<h2 id="lock-type-benchmarks">Lock Type Benchmarks<a class="headerlink" href="#lock-type-benchmarks" title="Permanent link">&para;</a></h2>
+<h3 id="1-basic-distributed-lock-redlock">1. Basic Distributed Lock (Redlock)<a class="headerlink" href="#1-basic-distributed-lock-redlock" title="Permanent link">&para;</a></h3>
+<p>The fundamental distributed lock implementation.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total Ops/s</strong></td>
+<td>18.21</td>
+<td><strong>18.56</strong></td>
+<td>17.49</td>
+</tr>
+<tr>
+<td><strong>Avg Wait Time</strong></td>
+<td>229ms</td>
+<td><strong>218ms</strong></td>
+<td>265ms</td>
+</tr>
+<tr>
+<td><strong>p50 Latency</strong></td>
+<td>56.5ms</td>
+<td><strong>0.6ms</strong></td>
+<td>1.3ms</td>
+</tr>
+<tr>
+<td><strong>p95 Latency</strong></td>
+<td>923ms</td>
+<td>110ms</td>
+<td>1,775ms</td>
+</tr>
+<tr>
+<td><strong>Correctness</strong></td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: redlock4j-singlenode outperforms Redisson by 2% with <strong>94x better p50 latency</strong>.</p>
+<hr />
+<h3 id="2-fairlock-fifo-ordering">2. FairLock (FIFO Ordering)<a class="headerlink" href="#2-fairlock-fifo-ordering" title="Permanent link">&para;</a></h3>
+<p>Guarantees lock acquisition in request order using Redis sorted sets.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total Ops/s</strong></td>
+<td><strong>18.25</strong></td>
+<td>17.85</td>
+<td>16.52</td>
+</tr>
+<tr>
+<td><strong>Avg Wait Time</strong></td>
+<td><strong>115ms</strong></td>
+<td>116ms</td>
+<td>126ms</td>
+</tr>
+<tr>
+<td><strong>FIFO Violations</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: Redisson slightly faster due to Lua script optimization. Both maintain strict FIFO ordering.</p>
+<hr />
+<h3 id="3-multilock-atomic-multi-resource">3. MultiLock (Atomic Multi-Resource)<a class="headerlink" href="#3-multilock-atomic-multi-resource" title="Permanent link">&para;</a></h3>
+<p>Acquires multiple resources atomically with deadlock prevention.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total Ops/s</strong></td>
+<td>17.58</td>
+<td><strong>18.02</strong></td>
+<td>16.87</td>
+</tr>
+<tr>
+<td><strong>Avg Wait Time</strong></td>
+<td><strong>114ms</strong></td>
+<td>117ms</td>
+<td>124ms</td>
+</tr>
+<tr>
+<td><strong>Correctness</strong></td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: redlock4j-singlenode is <strong>2.5% faster</strong> than Redisson.</p>
+<hr />
+<h3 id="4-readwritelock">4. ReadWriteLock<a class="headerlink" href="#4-readwritelock" title="Permanent link">&para;</a></h3>
+<p>Allows concurrent readers with exclusive writers.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Reader Ops/s</strong></td>
+<td><strong>50.44</strong></td>
+<td>20.40</td>
+<td>9.24</td>
+</tr>
+<tr>
+<td><strong>Writer Ops/s</strong></td>
+<td>6.09</td>
+<td><strong>17.81</strong></td>
+<td>16.65</td>
+</tr>
+<tr>
+<td><strong>Correctness</strong></td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: Redisson excels at concurrent reads; redlock4j has <strong>3x better writer throughput</strong>.</p>
+<hr />
+<h3 id="5-semaphore">5. Semaphore<a class="headerlink" href="#5-semaphore" title="Permanent link">&para;</a></h3>
+<p>Limits concurrent access to a resource (configurable permits).</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total Ops/s</strong></td>
+<td>54.69</td>
+<td><strong>108.49</strong></td>
+<td>103.32</td>
+</tr>
+<tr>
+<td><strong>Avg Wait Time</strong></td>
+<td>56.94ms</td>
+<td><strong>0.85ms</strong></td>
+<td>2.09ms</td>
+</tr>
+<tr>
+<td><strong>Correctness</strong></td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: redlock4j-singlenode is <strong>2x faster</strong> with <strong>67x lower latency</strong>.</p>
+<hr />
+<h3 id="6-countdownlatch">6. CountDownLatch<a class="headerlink" href="#6-countdownlatch" title="Permanent link">&para;</a></h3>
+<p>Distributed coordination - wait for N events to complete.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Latches/s</strong></td>
+<td>59.66</td>
+<td>35.59</td>
+<td><strong>60.97</strong></td>
+</tr>
+<tr>
+<td><strong>Avg Wait Time</strong></td>
+<td>16.74ms</td>
+<td><strong>16.32ms</strong></td>
+<td>16.34ms</td>
+</tr>
+<tr>
+<td><strong>Correctness</strong></td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+<td>✅ PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Analysis</strong>: redlock4j-3node slightly beats Redisson. Coordination primitives benefit from multi-node distribution.</p>
+<hr />
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<h3 id="throughput-opss-higher-is-better">Throughput (ops/s) - Higher is Better<a class="headerlink" href="#throughput-opss-higher-is-better" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Lock Type</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+<th>Winner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Distributed Lock</td>
+<td>18.21</td>
+<td><strong>18.56</strong></td>
+<td>17.49</td>
+<td>redlock4j</td>
+</tr>
+<tr>
+<td>FairLock</td>
+<td><strong>18.25</strong></td>
+<td>17.85</td>
+<td>16.52</td>
+<td>Redisson</td>
+</tr>
+<tr>
+<td>MultiLock</td>
+<td>17.58</td>
+<td><strong>18.02</strong></td>
+<td>16.87</td>
+<td>redlock4j</td>
+</tr>
+<tr>
+<td>ReadWriteLock</td>
+<td><strong>56.53</strong></td>
+<td>38.22</td>
+<td>25.89</td>
+<td>Redisson</td>
+</tr>
+<tr>
+<td><strong>Semaphore</strong></td>
+<td>54.69</td>
+<td><strong>108.49</strong></td>
+<td>103.32</td>
+<td><strong>redlock4j</strong></td>
+</tr>
+<tr>
+<td>CountDownLatch</td>
+<td>59.66</td>
+<td>35.59</td>
+<td><strong>60.97</strong></td>
+<td>redlock4j</td>
+</tr>
+</tbody>
+</table>
+<h3 id="latency-avg-ms-lower-is-better">Latency (avg ms) - Lower is Better<a class="headerlink" href="#latency-avg-ms-lower-is-better" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Lock Type</th>
+<th>Redisson</th>
+<th>redlock4j-singlenode</th>
+<th>redlock4j-3node</th>
+<th>Winner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Distributed Lock</td>
+<td>229</td>
+<td><strong>218</strong></td>
+<td>265</td>
+<td>redlock4j</td>
+</tr>
+<tr>
+<td>FairLock</td>
+<td><strong>115</strong></td>
+<td>116</td>
+<td>126</td>
+<td>Redisson</td>
+</tr>
+<tr>
+<td>MultiLock</td>
+<td><strong>114</strong></td>
+<td>117</td>
+<td>124</td>
+<td>Redisson</td>
+</tr>
+<tr>
+<td>ReadWriteLock</td>
+<td><strong>110</strong></td>
+<td>117</td>
+<td>275</td>
+<td>Redisson</td>
+</tr>
+<tr>
+<td><strong>Semaphore</strong></td>
+<td>56.94</td>
+<td><strong>0.85</strong></td>
+<td>2.09</td>
+<td><strong>redlock4j</strong></td>
+</tr>
+<tr>
+<td>CountDownLatch</td>
+<td>16.74</td>
+<td><strong>16.32</strong></td>
+<td>16.34</td>
+<td>redlock4j</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="key-takeaways">Key Takeaways<a class="headerlink" href="#key-takeaways" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Basic Distributed Lock</strong>: redlock4j matches or beats Redisson</li>
+<li><strong>FairLock</strong>: Redisson has slight edge due to Lua optimization</li>
+<li><strong>MultiLock</strong>: redlock4j competitive, simpler implementation</li>
+<li><strong>ReadWriteLock</strong>: Redisson better for read-heavy, redlock4j better for write-heavy</li>
+<li><strong>Semaphore</strong>: redlock4j is <strong>2x faster</strong> with <strong>67x lower latency</strong></li>
+<li><strong>CountDownLatch</strong>: redlock4j-3node slightly faster</li>
+<li><strong>3-node overhead</strong>: ~5-10% performance cost for distributed consensus</li>
+<li><strong>Correctness</strong>: All implementations pass with zero violations</li>
+</ol>
+<hr />
+<h2 id="running-benchmarks">Running Benchmarks<a class="headerlink" href="#running-benchmarks" title="Permanent link">&para;</a></h2>
+<p>The benchmark module is located in <code>redlock4j-benchmark/</code>. Requirements:</p>
+<ul>
+<li>Java 17+</li>
+<li>Docker (for Testcontainers)</li>
+</ul>
+<h3 id="basic-commands">Basic Commands<a class="headerlink" href="#basic-commands" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">cd</span><span class="w"> </span>redlock4j-benchmark
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Basic Distributed Lock</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.DistributedLockBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --clients 10&quot;</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="cm">&lt;!-- Choose one Redis client --&gt;</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="cm">&lt;!-- For Jedis: --&gt;</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="nt">&lt;dependency&gt;</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">&lt;groupId&gt;</span>redis.clients<span class="nt">&lt;/groupId&gt;</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">&lt;artifactId&gt;</span>jedis<span class="nt">&lt;/artifactId&gt;</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>7.1.0<span class="nt">&lt;/version&gt;</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nt">&lt;/dependency&gt;</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="cm">&lt;!-- Or for Lettuce: --&gt;</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nt">&lt;dependency&gt;</span>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="nt">&lt;groupId&gt;</span>io.lettuce<span class="nt">&lt;/groupId&gt;</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="nt">&lt;artifactId&gt;</span>lettuce-core<span class="nt">&lt;/artifactId&gt;</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>7.1.0.RELEASE<span class="nt">&lt;/version&gt;</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="nt">&lt;/dependency&gt;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># FairLock (FIFO ordering)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --clients 10&quot;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># MultiLock (atomic multi-resource)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.MultiLockBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --clients 5 --resources 5&quot;</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="c1"># ReadWriteLock</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.ReadWriteLockBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --writers 2 --readers 8&quot;</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Semaphore</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.SemaphoreBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --clients 6 --permits 3&quot;</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1"># CountDownLatch</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.CountDownLatchBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 5 --count 5&quot;</span>
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>Add the following to your <code>build.gradle</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">{</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="n">implementation</span><span class="w"> </span><span class="s1">&#39;org.codarama:redlock4j:1.1.0&#39;</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="c1">// Choose one Redis client:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="c1">// For Jedis:</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="n">implementation</span><span class="w"> </span><span class="s1">&#39;redis.clients:jedis:7.1.0&#39;</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="c1">// Or for Lettuce:</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="n">implementation</span><span class="w"> </span><span class="s1">&#39;io.lettuce:lettuce-core:7.1.0.RELEASE&#39;</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="o">}</span>
+<h3 id="command-line-options">Command Line Options<a class="headerlink" href="#command-line-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--duration &lt;min&gt;</code></td>
+<td>Benchmark duration in minutes</td>
+<td>30</td>
+</tr>
+<tr>
+<td><code>--clients &lt;n&gt;</code></td>
+<td>Number of concurrent clients</td>
+<td>10</td>
+</tr>
+<tr>
+<td><code>--nodes &lt;n&gt;</code></td>
+<td>Number of Redis nodes</td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>--warmup &lt;sec&gt;</code></td>
+<td>Warmup duration in seconds</td>
+<td>60</td>
+</tr>
+<tr>
+<td><code>--resources &lt;n&gt;</code></td>
+<td>Resources per MultiLock</td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>--writers &lt;n&gt;</code></td>
+<td>Writer count for RWLock</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>--readers &lt;n&gt;</code></td>
+<td>Reader count for RWLock</td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>--permits &lt;n&gt;</code></td>
+<td>Semaphore permits</td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>--count &lt;n&gt;</code></td>
+<td>CountDownLatch count</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<h3 id="quick-benchmark">Quick Benchmark<a class="headerlink" href="#quick-benchmark" title="Permanent link">&para;</a></h3>
+<p>For a quick comparison (1 minute):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mvn<span class="w"> </span>exec:java<span class="w"> </span>-Dbenchmark.mainClass<span class="o">=</span><span class="s2">&quot;org.codarama.redlock4j.benchmark.DistributedLockBenchmarkMain&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span>-Dexec.args<span class="o">=</span><span class="s2">&quot;--duration 1 --clients 5 --warmup 10&quot;</span>
 </code></pre></div>
-</div>
-</div>
-</div>
-<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Java 8</strong> or higher</li>
-<li><strong>Redis 2.6.12</strong> or higher (for Lua script support)</li>
-<li>One of the supported Redis clients:<ul>
-<li>Jedis 3.0+ or 4.0+</li>
-<li>Lettuce 5.0+ or 6.0+</li>
-</ul>
-</li>
-</ul>
-<h2 id="verifying-installation">Verifying Installation<a class="headerlink" href="#verifying-installation" title="Permanent link">&para;</a></h2>
-<p>After adding the dependencies, verify the installation by creating a simple test:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">org.codarama.redlock4j.Redlock</span><span class="p">;</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">redis.clients.jedis.JedisPool</span><span class="p">;</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">RedlockTest</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="n">JedisPool</span><span class="w"> </span><span class="n">pool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">JedisPool</span><span class="p">(</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">6379</span><span class="p">);</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">        </span><span class="n">Redlock</span><span class="w"> </span><span class="n">redlock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Redlock</span><span class="p">(</span><span class="n">pool</span><span class="p">);</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;Redlock4j is ready!&quot;</span><span class="p">);</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">        </span><span class="n">pool</span><span class="p">.</span><span class="na">close</span><span class="p">();</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="p">}</span>
-</code></pre></div>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../quick-start/">Quick Start Guide</a> - Learn the basics</li>
-</ul>
 
 
 
@@ -1623,7 +2458,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="May 20, 2026 16:28:37 UTC">May 20, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="April 22, 2026 21:08:30 UTC">April 22, 2026</span>
   </span>
 
     
@@ -1633,7 +2468,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="February 9, 2026 16:44:59 UTC">February 9, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="April 22, 2026 21:08:30 UTC">April 22, 2026</span>
   </span>
 
     
