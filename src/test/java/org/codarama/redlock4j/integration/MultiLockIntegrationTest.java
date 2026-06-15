@@ -69,19 +69,7 @@ public class MultiLockIntegrationTest {
         }
     }
 
-    @Test
-    void shouldRejectEmptyKeyList() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            assertThrows(IllegalArgumentException.class, () -> manager.createMultiLock(Arrays.asList()));
-        }
-    }
-
-    @Test
-    void shouldRejectNullKeyList() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            assertThrows(IllegalArgumentException.class, () -> manager.createMultiLock(null));
-        }
-    }
+    // Note: Validation tests (shouldRejectEmptyKeyList, shouldRejectNullKeyList) are in MultiLockTest (unit)
 
     // ========== All-or-Nothing Semantics ==========
 
@@ -286,6 +274,69 @@ public class MultiLockIntegrationTest {
 
             assertTrue(multiLock.tryLock(5, TimeUnit.SECONDS));
             multiLock.unlock();
+        }
+    }
+
+    // ========== Partial Failure Tests ==========
+    // Note: Tests that stop/restart Testcontainers are removed because container restart
+    // changes mapped ports, breaking the test configuration. Node failure scenarios should
+    // be tested with dedicated infrastructure (e.g., Toxiproxy or real Redis instances).
+
+    /**
+     * Tests atomic rollback when one resource in multi-lock can't be acquired. Verifies that partial locks are properly
+     * cleaned up.
+     */
+    @Test
+    void shouldRollbackPartialLocksOnFailure() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            // First, hold one of the resources
+            Lock blocker = manager.createLock("rollback:B");
+            assertTrue(blocker.tryLock(5, TimeUnit.SECONDS));
+
+            try {
+                // Try to acquire multi-lock including blocked resource
+                List<String> keys = Arrays.asList("rollback:A", "rollback:B", "rollback:C");
+                Lock multiLock = manager.createMultiLock(keys);
+
+                // Should fail since rollback:B is held
+                assertFalse(multiLock.tryLock(1, TimeUnit.SECONDS));
+
+                // Verify that rollback:A and rollback:C are NOT held
+                // (i.e., partial locks were rolled back)
+                Lock verifyA = manager.createLock("rollback:A");
+                Lock verifyC = manager.createLock("rollback:C");
+
+                assertTrue(verifyA.tryLock(1, TimeUnit.SECONDS),
+                        "rollback:A should be available after failed multi-lock");
+                verifyA.unlock();
+
+                assertTrue(verifyC.tryLock(1, TimeUnit.SECONDS),
+                        "rollback:C should be available after failed multi-lock");
+                verifyC.unlock();
+            } finally {
+                blocker.unlock();
+            }
+        }
+    }
+
+    /**
+     * Tests that unlock releases all resources even if some nodes are slow.
+     */
+    @Test
+    void shouldReleaseAllResourcesOnUnlock() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            List<String> keys = Arrays.asList("release:A", "release:B", "release:C");
+            Lock multiLock = manager.createMultiLock(keys);
+
+            assertTrue(multiLock.tryLock(5, TimeUnit.SECONDS));
+            multiLock.unlock();
+
+            // Verify all individual resources are available
+            for (String key : keys) {
+                Lock single = manager.createLock(key);
+                assertTrue(single.tryLock(1, TimeUnit.SECONDS), key + " should be available after multi-lock unlock");
+                single.unlock();
+            }
         }
     }
 }

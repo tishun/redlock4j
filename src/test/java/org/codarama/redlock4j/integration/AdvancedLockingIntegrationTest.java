@@ -16,15 +16,20 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for advanced locking primitives.
+ * Smoke tests verifying all locking primitives work together in a single test run. Detailed tests for each primitive
+ * are in their respective integration test classes:
+ * <ul>
+ * <li>{@link FairLockIntegrationTest}</li>
+ * <li>{@link MultiLockIntegrationTest}</li>
+ * <li>{@link RedlockReadWriteLockIntegrationTest}</li>
+ * <li>{@link RedlockSemaphoreIntegrationTest}</li>
+ * <li>{@link RedlockCountDownLatchIntegrationTest}</li>
+ * </ul>
  */
 @Tag("integration")
 @Testcontainers
@@ -53,230 +58,81 @@ public class AdvancedLockingIntegrationTest {
                 .build();
     }
 
+    /**
+     * Single smoke test verifying all primitives can be created and used within one RedlockManager session.
+     */
     @Test
-    public void testFairLockBasic() {
+    public void allPrimitivesWorkTogether() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            Lock fairLock = manager.createFairLock("test-fair-lock");
+            // Redlock (basic)
+            Lock basicLock = manager.createLock("smoke-basic");
+            assertTrue(basicLock.tryLock(), "Basic lock");
+            basicLock.unlock();
 
-            assertTrue(fairLock.tryLock(), "Should acquire fair lock");
+            // FairLock
+            Lock fairLock = manager.createFairLock("smoke-fair");
+            assertTrue(fairLock.tryLock(), "Fair lock");
             fairLock.unlock();
-        }
-    }
 
-    @Test
-    public void testFairLockWithLettuce() {
-        try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
-            Lock fairLock = manager.createFairLock("test-fair-lock-lettuce");
-
-            assertTrue(fairLock.tryLock(), "Should acquire fair lock with Lettuce");
-            fairLock.unlock();
-        }
-    }
-
-    @Test
-    public void testMultiLockBasic() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            Lock multiLock = manager.createMultiLock(Arrays.asList("resource1", "resource2", "resource3"));
-
-            assertTrue(multiLock.tryLock(), "Should acquire all locks atomically");
+            // MultiLock
+            Lock multiLock = manager.createMultiLock(Arrays.asList("smoke-m1", "smoke-m2"));
+            assertTrue(multiLock.tryLock(), "Multi lock");
             multiLock.unlock();
-        }
-    }
 
-    @Test
-    public void testMultiLockWithLettuce() {
-        try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
-            Lock multiLock = manager.createMultiLock(Arrays.asList("res-a", "res-b"));
+            // ReadWriteLock
+            RedlockReadWriteLock rwLock = manager.createReadWriteLock("smoke-rw");
+            assertTrue(rwLock.readLock().tryLock(), "Read lock");
+            rwLock.readLock().unlock();
+            assertTrue(rwLock.writeLock().tryLock(), "Write lock");
+            rwLock.writeLock().unlock();
 
-            assertTrue(multiLock.tryLock(), "Should acquire MultiLock with Lettuce");
-            multiLock.unlock();
-        }
-    }
-
-    @Test
-    public void testSemaphoreBasic() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockSemaphore semaphore = manager.createSemaphore("test-semaphore", 3);
-
+            // Semaphore
+            RedlockSemaphore semaphore = manager.createSemaphore("smoke-sem", 3);
             semaphore.acquire();
             semaphore.release();
+
+            // CountDownLatch
+            RedlockCountDownLatch latch = manager.createCountDownLatch("smoke-latch", 2);
+            assertEquals(2, latch.getCount());
+            latch.countDown();
+            assertEquals(1, latch.getCount());
         }
     }
 
+    /**
+     * Verifies Lettuce driver works with all primitives.
+     */
     @Test
-    public void testSemaphoreWithLettuce() throws InterruptedException {
+    public void allPrimitivesWorkWithLettuce() throws InterruptedException {
         try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
-            RedlockSemaphore semaphore = manager.createSemaphore("test-semaphore-lettuce", 2);
+            // Basic lock
+            Lock basicLock = manager.createLock("lettuce-basic");
+            assertTrue(basicLock.tryLock());
+            basicLock.unlock();
 
+            // FairLock
+            Lock fairLock = manager.createFairLock("lettuce-fair");
+            assertTrue(fairLock.tryLock());
+            fairLock.unlock();
+
+            // MultiLock
+            Lock multiLock = manager.createMultiLock(Arrays.asList("lettuce-m1", "lettuce-m2"));
+            assertTrue(multiLock.tryLock());
+            multiLock.unlock();
+
+            // ReadWriteLock
+            RedlockReadWriteLock rwLock = manager.createReadWriteLock("lettuce-rw");
+            assertTrue(rwLock.readLock().tryLock());
+            rwLock.readLock().unlock();
+
+            // Semaphore
+            RedlockSemaphore semaphore = manager.createSemaphore("lettuce-sem", 2);
             semaphore.acquire();
             semaphore.release();
-        }
-    }
 
-    @Test
-    public void testSemaphoreConcurrentAccess() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            int permits = 2;
-            int threadCount = 5;
-            RedlockSemaphore semaphore = manager.createSemaphore("test-semaphore-concurrent", permits);
-
-            AtomicInteger successCount = new AtomicInteger(0);
-            CountDownLatch startLatch = new CountDownLatch(1);
-            CountDownLatch endLatch = new CountDownLatch(threadCount);
-
-            for (int i = 0; i < threadCount; i++) {
-                new Thread(() -> {
-                    try {
-                        startLatch.await();
-                        semaphore.acquire();
-                        successCount.incrementAndGet();
-                        Thread.sleep(50);
-                        semaphore.release();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        endLatch.countDown();
-                    }
-                }).start();
-            }
-
-            startLatch.countDown();
-            assertTrue(endLatch.await(30, TimeUnit.SECONDS), "All threads should complete");
-            assertEquals(threadCount, successCount.get(), "All threads should acquire semaphore");
-        }
-    }
-
-    @Test
-    public void testReadWriteLockBasic() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockReadWriteLock rwLock = manager.createReadWriteLock("test-rwlock");
-
-            Lock readLock = rwLock.readLock();
-            assertTrue(readLock.tryLock(), "Should acquire read lock");
-            readLock.unlock();
-
-            Lock writeLock = rwLock.writeLock();
-            assertTrue(writeLock.tryLock(), "Should acquire write lock");
-            writeLock.unlock();
-        }
-    }
-
-    @Test
-    public void testReadWriteLockWithLettuce() {
-        try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
-            RedlockReadWriteLock rwLock = manager.createReadWriteLock("test-rwlock-lettuce");
-
-            Lock readLock = rwLock.readLock();
-            assertTrue(readLock.tryLock(), "Should acquire read lock with Lettuce");
-            readLock.unlock();
-
-            Lock writeLock = rwLock.writeLock();
-            assertTrue(writeLock.tryLock(), "Should acquire write lock with Lettuce");
-            writeLock.unlock();
-        }
-    }
-
-    @Test
-    public void testCountDownLatchBasic() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockCountDownLatch latch = manager.createCountDownLatch("test-latch", 3);
-
-            assertEquals(3, latch.getCount(), "Initial count should be 3");
-
-            latch.countDown();
-            assertEquals(2, latch.getCount(), "Count should be 2 after first countdown");
-
-            latch.countDown();
-            assertEquals(1, latch.getCount(), "Count should be 1 after second countdown");
-
-            latch.countDown();
-            assertEquals(0, latch.getCount(), "Count should be 0 after third countdown");
-        }
-    }
-
-    @Test
-    public void testCountDownLatchWithLettuce() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withLettuce(testConfiguration)) {
-            RedlockCountDownLatch latch = manager.createCountDownLatch("test-latch-lettuce", 2);
-
-            assertEquals(2, latch.getCount(), "Initial count should be 2 with Lettuce");
-            latch.countDown();
-            assertEquals(1, latch.getCount(), "Count should be 1 after countdown with Lettuce");
-        }
-    }
-
-    @Test
-    public void testCountDownLatchAwait() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockCountDownLatch latch = manager.createCountDownLatch("test-latch-await", 2);
-            AtomicInteger awaitCompleted = new AtomicInteger(0);
-            CountDownLatch threadStarted = new CountDownLatch(1);
-
-            // Start thread that waits
-            new Thread(() -> {
-                try (RedlockManager mgr = RedlockManager.withJedis(testConfiguration)) {
-                    RedlockCountDownLatch waitLatch = mgr.createCountDownLatch("test-latch-await", 2);
-                    threadStarted.countDown();
-                    if (waitLatch.await(Duration.ofSeconds(10))) {
-                        awaitCompleted.incrementAndGet();
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }).start();
-
-            // Wait for thread to start
-            assertTrue(threadStarted.await(2, TimeUnit.SECONDS), "Thread should start");
-            Thread.sleep(500); // Give time for subscription
-
-            // Count down
-            latch.countDown();
-            latch.countDown();
-
-            // Wait for await to complete
-            Thread.sleep(1000);
-            assertEquals(1, awaitCompleted.get(), "Await should complete after countdown reaches zero");
-        }
-    }
-
-    @Test
-    public void testMultipleConcurrentReaders() throws InterruptedException {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockReadWriteLock rwLock = manager.createReadWriteLock("test-rwlock-concurrent");
-
-            int readerCount = 3;
-            AtomicInteger concurrentReaders = new AtomicInteger(0);
-            AtomicInteger maxConcurrent = new AtomicInteger(0);
-            CountDownLatch startLatch = new CountDownLatch(1);
-            CountDownLatch endLatch = new CountDownLatch(readerCount);
-
-            for (int i = 0; i < readerCount; i++) {
-                new Thread(() -> {
-                    try (RedlockManager mgr = RedlockManager.withJedis(testConfiguration)) {
-                        RedlockReadWriteLock lock = mgr.createReadWriteLock("test-rwlock-concurrent");
-                        Lock readLock = lock.readLock();
-
-                        startLatch.await();
-                        readLock.lock();
-
-                        int current = concurrentReaders.incrementAndGet();
-                        maxConcurrent.updateAndGet(max -> Math.max(max, current));
-
-                        Thread.sleep(100);
-
-                        concurrentReaders.decrementAndGet();
-                        readLock.unlock();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        endLatch.countDown();
-                    }
-                }).start();
-            }
-
-            startLatch.countDown();
-            assertTrue(endLatch.await(15, TimeUnit.SECONDS), "All readers should complete");
-            assertTrue(maxConcurrent.get() > 1, "Multiple readers should access concurrently");
+            // CountDownLatch
+            RedlockCountDownLatch latch = manager.createCountDownLatch("lettuce-latch", 1);
+            assertEquals(1, latch.getCount());
         }
     }
 }

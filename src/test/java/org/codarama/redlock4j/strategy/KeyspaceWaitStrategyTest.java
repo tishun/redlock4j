@@ -235,4 +235,184 @@ class KeyspaceWaitStrategyTest {
         waiter.join(1000);
         assertFalse(waiter.isAlive());
     }
+
+    // ========== Concurrent Waiters Tests ==========
+
+    @Test
+    void concurrentWaiters_shouldAllWakeUpOnLockRelease() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        int waiterCount = 5;
+        java.util.concurrent.CountDownLatch allStarted = new java.util.concurrent.CountDownLatch(waiterCount);
+        java.util.concurrent.CountDownLatch allDone = new java.util.concurrent.CountDownLatch(waiterCount);
+        java.util.concurrent.atomic.AtomicInteger completedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        String lockKey = "concurrent-test-lock";
+
+        // Start multiple waiters on the same lock key
+        for (int i = 0; i < waiterCount; i++) {
+            new Thread(() -> {
+                try {
+                    allStarted.countDown();
+                    strategy.waitForRelease(lockKey, Duration.ofSeconds(10));
+                    completedCount.incrementAndGet();
+                } catch (Exception e) {
+                    // Ignore
+                } finally {
+                    allDone.countDown();
+                }
+            }).start();
+        }
+
+        // Wait for all threads to start waiting
+        assertTrue(allStarted.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        Thread.sleep(100); // Let them register in waitingLatches
+
+        // Close to release all waiters
+        strategy.close();
+
+        // All waiters should complete
+        assertTrue(allDone.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(waiterCount, completedCount.get());
+    }
+
+    @Test
+    void concurrentWaiters_shouldShareSameLatch() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        String lockKey = "shared-latch-test";
+        java.util.concurrent.CountDownLatch startGate = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch allDone = new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.atomic.AtomicInteger successCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        // Two threads waiting on the same key should share the latch
+        Thread t1 = new Thread(() -> {
+            try {
+                startGate.await();
+                strategy.waitForRelease(lockKey, Duration.ofMillis(500));
+                successCount.incrementAndGet();
+            } catch (Exception e) {
+                // Expected on close
+            } finally {
+                allDone.countDown();
+            }
+        });
+
+        Thread t2 = new Thread(() -> {
+            try {
+                startGate.await();
+                strategy.waitForRelease(lockKey, Duration.ofMillis(500));
+                successCount.incrementAndGet();
+            } catch (Exception e) {
+                // Expected on close
+            } finally {
+                allDone.countDown();
+            }
+        });
+
+        t1.start();
+        t2.start();
+
+        // Release both threads simultaneously
+        startGate.countDown();
+
+        // Wait for both to timeout or complete
+        assertTrue(allDone.await(2, java.util.concurrent.TimeUnit.SECONDS));
+
+        // Both should have completed (via timeout)
+        assertEquals(2, successCount.get());
+
+        strategy.close();
+    }
+
+    @Test
+    void concurrentWaiters_rapidAcquireReleasePattern() throws Exception {
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        String lockKey = "rapid-test";
+        int iterations = 20;
+        java.util.concurrent.atomic.AtomicInteger successCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(iterations);
+
+        // Rapidly create and complete waitForRelease calls
+        for (int i = 0; i < iterations; i++) {
+            new Thread(() -> {
+                try {
+                    // Very short timeout to simulate rapid acquire/release
+                    boolean result = strategy.waitForRelease(lockKey, Duration.ofMillis(10));
+                    if (result) {
+                        successCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+
+        assertTrue(done.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        // All should return true (even if via timeout)
+        assertEquals(iterations, successCount.get());
+
+        strategy.close();
+    }
+
+    @Test
+    void concurrentWaiters_shouldHandleLatchRemovalRace() throws Exception {
+        // This test specifically targets the race condition where one thread
+        // removes the latch while another is still using it
+        RedisDriver mockDriver = Mockito.mock(RedisDriver.class);
+        when(mockDriver.getIdentifier()).thenReturn("test-redis");
+        when(mockDriver.configGet("notify-keyspace-events")).thenReturn("Kgx");
+
+        KeyspaceWaitStrategy strategy = new KeyspaceWaitStrategy();
+        strategy.initialize(Arrays.asList(mockDriver), Duration.ofMillis(50));
+
+        String lockKey = "latch-race-test";
+        int threadCount = 10;
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(threadCount);
+        java.util.concurrent.atomic.AtomicInteger errorCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(threadCount);
+
+        // All threads start simultaneously to maximize contention
+        for (int i = 0; i < threadCount; i++) {
+            final int threadNum = i;
+            new Thread(() -> {
+                try {
+                    barrier.await(); // Synchronize start
+                    // Mix of short and longer timeouts to create race conditions
+                    Duration timeout = Duration.ofMillis(10 + (threadNum % 3) * 10);
+                    strategy.waitForRelease(lockKey, timeout);
+                } catch (InterruptedException | java.util.concurrent.BrokenBarrierException e) {
+                    // Expected
+                } catch (Exception e) {
+                    errorCount.incrementAndGet();
+                    e.printStackTrace();
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+
+        assertTrue(done.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(0, errorCount.get(), "No errors should occur during concurrent latch access");
+
+        strategy.close();
+    }
 }

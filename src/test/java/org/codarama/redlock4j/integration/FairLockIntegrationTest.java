@@ -302,4 +302,144 @@ public class FairLockIntegrationTest {
             fairLock.unlock();
         }
     }
+
+    // ========== Orphan Cleanup Tests ==========
+
+    /**
+     * Tests that orphan queue entries from crashed clients are eventually cleaned up. Simulates a scenario where a
+     * client adds itself to the queue but crashes before completing the lock acquisition or cleanup.
+     */
+    @Test
+    void shouldCleanupOrphanQueueEntries() throws InterruptedException {
+        // Use a short TTL configuration to speed up orphan expiration
+        RedlockConfiguration shortTtlConfig = RedlockConfiguration.builder()
+                .addRedisNode("localhost", redis1.getMappedPort(6379))
+                .addRedisNode("localhost", redis2.getMappedPort(6379))
+                .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofMillis(500)) // Very
+                                                                                                                  // short
+                                                                                                                  // TTL
+                .lockAcquisitionTimeout(Duration.ofSeconds(5)).retryDelay(Duration.ofMillis(50)).maxRetryAttempts(50)
+                .usePolling().build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(shortTtlConfig)) {
+            String lockName = "orphan-cleanup-test-" + System.currentTimeMillis();
+
+            // Simulate orphan entry: acquire lock, hold it past expiration without explicit unlock
+            Thread orphanThread = new Thread(() -> {
+                try {
+                    FairLock lock = (FairLock) manager.createFairLock(lockName);
+                    if (lock.tryLock(2, TimeUnit.SECONDS)) {
+                        // Simulate crash by NOT unlocking and sleeping past TTL
+                        Thread.sleep(1000); // Sleep longer than 500ms TTL
+                        // No unlock() - simulating crash
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            orphanThread.start();
+            orphanThread.join();
+
+            // Wait for TTL to expire and cleanup window to pass
+            Thread.sleep(1500); // 500ms TTL * 2 = 1000ms expiration window + buffer
+
+            // Another client should be able to acquire despite orphan entry
+            FairLock cleanupLock = (FairLock) manager.createFairLock(lockName);
+
+            // This acquisition triggers cleanup of expired queue entries
+            boolean acquired = cleanupLock.tryLock(5, TimeUnit.SECONDS);
+
+            assertTrue(acquired, "Should acquire lock after orphan entries are cleaned up");
+            assertTrue(cleanupLock.isHeldByCurrentThread());
+            cleanupLock.unlock();
+        }
+    }
+
+    /**
+     * Tests that interrupt during lock acquisition properly removes queue entry.
+     */
+    @Test
+    void shouldRemoveQueueEntryOnInterrupt() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            String lockName = "interrupt-cleanup-test";
+            FairLock blockingLock = (FairLock) manager.createFairLock(lockName);
+
+            // First, acquire the lock to block others
+            assertTrue(blockingLock.tryLock(5, TimeUnit.SECONDS));
+
+            AtomicInteger interruptedThreadResult = new AtomicInteger(-1);
+            CountDownLatch waitingStarted = new CountDownLatch(1);
+
+            // Second thread waits and will be interrupted
+            Thread waitingThread = new Thread(() -> {
+                try {
+                    FairLock waitingLock = (FairLock) manager.createFairLock(lockName);
+                    waitingStarted.countDown();
+                    // This will block since blockingLock holds the lock
+                    waitingLock.tryLock(30, TimeUnit.SECONDS);
+                    interruptedThreadResult.set(0); // Should not reach here
+                } catch (InterruptedException e) {
+                    interruptedThreadResult.set(1); // Interrupted as expected
+                    Thread.currentThread().interrupt();
+                }
+            });
+            waitingThread.start();
+
+            // Wait for thread to start waiting
+            assertTrue(waitingStarted.await(2, TimeUnit.SECONDS));
+            Thread.sleep(200); // Let it add to queue
+
+            // Interrupt the waiting thread
+            waitingThread.interrupt();
+            waitingThread.join(2000);
+
+            assertEquals(1, interruptedThreadResult.get(), "Thread should have been interrupted");
+
+            // Release blocking lock
+            blockingLock.unlock();
+
+            // Third client should be able to acquire without issues
+            FairLock thirdLock = (FairLock) manager.createFairLock(lockName);
+            assertTrue(thirdLock.tryLock(2, TimeUnit.SECONDS), "Third lock should acquire cleanly");
+            thirdLock.unlock();
+        }
+    }
+
+    /**
+     * Tests that timeout during lock acquisition properly removes queue entry.
+     */
+    @Test
+    void shouldRemoveQueueEntryOnTimeout() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            String lockName = "timeout-cleanup-test";
+            FairLock holdingLock = (FairLock) manager.createFairLock(lockName);
+
+            // Hold the lock
+            assertTrue(holdingLock.tryLock(5, TimeUnit.SECONDS));
+
+            // Second thread times out waiting
+            AtomicInteger timeoutResult = new AtomicInteger(-1);
+            Thread timeoutThread = new Thread(() -> {
+                try {
+                    FairLock timeoutLock = (FairLock) manager.createFairLock(lockName);
+                    boolean acquired = timeoutLock.tryLock(500, TimeUnit.MILLISECONDS);
+                    timeoutResult.set(acquired ? 1 : 0);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            timeoutThread.start();
+            timeoutThread.join(5000);
+
+            assertEquals(0, timeoutResult.get(), "Second thread should timeout");
+
+            // Release holding lock
+            holdingLock.unlock();
+
+            // Third client should acquire without waiting for expired queue entry
+            FairLock freshLock = (FairLock) manager.createFairLock(lockName);
+            assertTrue(freshLock.tryLock(2, TimeUnit.SECONDS), "Fresh lock should acquire after timeout cleanup");
+            freshLock.unlock();
+        }
+    }
 }

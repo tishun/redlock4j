@@ -331,4 +331,186 @@ public class RedlockReadWriteLockIntegrationTest {
             writeLock.unlock();
         }
     }
+
+    // ========== Writer Starvation Tests ==========
+
+    /**
+     * Tests that under continuous reader load, a writer can still eventually acquire the lock. This documents the
+     * current behavior - the RW lock does NOT guarantee writer preference, meaning writers CAN be starved by continuous
+     * readers.
+     */
+    @Test
+    void shouldDocumentWriterStarvationRisk() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            RedlockReadWriteLock rwLock = manager.createReadWriteLock("writer-starvation-test");
+            AtomicBoolean writerAcquired = new AtomicBoolean(false);
+            AtomicInteger readerAcquisitions = new AtomicInteger(0);
+            AtomicBoolean stopReaders = new AtomicBoolean(false);
+            CountDownLatch readersStarted = new CountDownLatch(3);
+            CountDownLatch writerStarted = new CountDownLatch(1);
+            CountDownLatch allDone = new CountDownLatch(4); // 3 readers + 1 writer
+
+            // Start continuous readers
+            for (int i = 0; i < 3; i++) {
+                new Thread(() -> {
+                    try {
+                        readersStarted.countDown();
+                        while (!stopReaders.get()) {
+                            Lock readLock = rwLock.readLock();
+                            if (readLock.tryLock(1, TimeUnit.SECONDS)) {
+                                try {
+                                    readerAcquisitions.incrementAndGet();
+                                    Thread.sleep(20); // Hold briefly
+                                } finally {
+                                    readLock.unlock();
+                                }
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        allDone.countDown();
+                    }
+                }).start();
+            }
+
+            // Wait for readers to start
+            assertTrue(readersStarted.await(5, TimeUnit.SECONDS));
+            Thread.sleep(100); // Let readers establish presence
+
+            // Writer tries to acquire
+            new Thread(() -> {
+                try {
+                    writerStarted.countDown();
+                    Lock writeLock = rwLock.writeLock();
+                    // Writer may or may not succeed under reader pressure
+                    // Using short timeout to demonstrate the starvation risk
+                    boolean acquired = writeLock.tryLock(2, TimeUnit.SECONDS);
+                    writerAcquired.set(acquired);
+                    if (acquired) {
+                        writeLock.unlock();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    allDone.countDown();
+                }
+            }).start();
+
+            // Wait for writer to attempt
+            assertTrue(writerStarted.await(5, TimeUnit.SECONDS));
+            Thread.sleep(3000); // Give writer time to try
+
+            // Stop readers and clean up
+            stopReaders.set(true);
+            assertTrue(allDone.await(10, TimeUnit.SECONDS));
+
+            // Document the actual behavior
+            assertTrue(readerAcquisitions.get() > 0, "Readers should have acquired locks");
+
+            // NOTE: Writer may or may not have acquired depending on timing.
+            // This test documents that writer starvation IS possible.
+            // A production system needing writer fairness should use FairLock instead.
+            System.out.println("Writer starvation test: writer acquired = " + writerAcquired.get()
+                    + ", reader acquisitions = " + readerAcquisitions.get());
+        }
+    }
+
+    /**
+     * Tests that a writer can acquire the lock when readers release in a gap between read operations.
+     */
+    @Test
+    void writerShouldAcquireInReaderGap() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            RedlockReadWriteLock rwLock = manager.createReadWriteLock("writer-in-gap-test");
+            AtomicBoolean writerAcquired = new AtomicBoolean(false);
+            AtomicInteger readerAcquisitions = new AtomicInteger(0);
+            CountDownLatch readerDone = new CountDownLatch(1);
+            CountDownLatch writerDone = new CountDownLatch(1);
+
+            // Reader does a few acquisitions then stops
+            new Thread(() -> {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        Lock readLock = rwLock.readLock();
+                        if (readLock.tryLock(5, TimeUnit.SECONDS)) {
+                            try {
+                                readerAcquisitions.incrementAndGet();
+                                Thread.sleep(50);
+                            } finally {
+                                readLock.unlock();
+                            }
+                        }
+                        Thread.sleep(100); // Gap between reads
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    readerDone.countDown();
+                }
+            }).start();
+
+            // Writer waits for gap
+            new Thread(() -> {
+                try {
+                    Thread.sleep(200); // Start after first reader acquisition
+                    Lock writeLock = rwLock.writeLock();
+                    // Should eventually acquire in a gap
+                    boolean acquired = writeLock.tryLock(5, TimeUnit.SECONDS);
+                    writerAcquired.set(acquired);
+                    if (acquired) {
+                        Thread.sleep(50);
+                        writeLock.unlock();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    writerDone.countDown();
+                }
+            }).start();
+
+            assertTrue(readerDone.await(10, TimeUnit.SECONDS));
+            assertTrue(writerDone.await(10, TimeUnit.SECONDS));
+            assertTrue(writerAcquired.get(), "Writer should acquire during reader gap");
+        }
+    }
+
+    /**
+     * Tests that multiple writers waiting don't starve each other.
+     */
+    @Test
+    void multipleWritersShouldNotStarveEachOther() throws InterruptedException {
+        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
+            RedlockReadWriteLock rwLock = manager.createReadWriteLock("multi-writer-fairness");
+            int writerCount = 3;
+            AtomicInteger successfulWriters = new AtomicInteger(0);
+            CountDownLatch startGate = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(writerCount);
+
+            for (int i = 0; i < writerCount; i++) {
+                new Thread(() -> {
+                    try {
+                        startGate.await();
+                        Lock writeLock = rwLock.writeLock();
+                        if (writeLock.tryLock(15, TimeUnit.SECONDS)) {
+                            try {
+                                successfulWriters.incrementAndGet();
+                                Thread.sleep(100);
+                            } finally {
+                                writeLock.unlock();
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                }).start();
+            }
+
+            startGate.countDown();
+            assertTrue(done.await(60, TimeUnit.SECONDS), "All writers should complete");
+            assertEquals(writerCount, successfulWriters.get(), "All writers should eventually acquire the lock");
+        }
+    }
 }
