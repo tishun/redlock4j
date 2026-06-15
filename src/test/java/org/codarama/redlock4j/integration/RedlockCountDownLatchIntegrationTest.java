@@ -67,14 +67,7 @@ public class RedlockCountDownLatchIntegrationTest {
         }
     }
 
-    @Test
-    void shouldRejectNegativeCount() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            assertThrows(IllegalArgumentException.class, () -> {
-                manager.createCountDownLatch("negative-test", -1);
-            }, "Should reject negative count");
-        }
-    }
+    // Note: Validation test (shouldRejectNegativeCount) is in RedlockCountDownLatchTest (unit)
 
     @Test
     void shouldAllowZeroCount() {

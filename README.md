@@ -453,7 +453,7 @@ rxLock.tryLockRx()
     .subscribe();
 ```
 
-**Important:** Lock extension is for efficiency, not correctness. It does not solve GC pause problems. For true correctness, use fencing tokens. See [Lock Extension Documentation](docs/LOCK-EXTENSION.md) for details.
+**Important:** Lock extension is for efficiency, not correctness. It does not solve GC pause problems. For true correctness, use fencing tokens.
 
 ## How Redlock Works
 

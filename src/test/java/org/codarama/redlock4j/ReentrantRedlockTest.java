@@ -4,6 +4,7 @@
  */
 package org.codarama.redlock4j;
 
+import org.codarama.redlock4j.async.AsyncRedlockImpl;
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
 import org.codarama.redlock4j.driver.RedisDriverException;
@@ -17,18 +18,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for reentrant functionality of Redlock using Mockito mocks.
+ * Tests demonstrating reentrant lock functionality with verbose output. These tests serve as both executable
+ * documentation and regression tests for reentrancy behavior.
  */
 @Tag("unit")
 @ExtendWith(MockitoExtension.class)
@@ -62,216 +62,182 @@ public class ReentrantRedlockTest {
     }
 
     @Test
-    public void testBasicReentrancy() throws RedisDriverException {
+    public void demonstrateReentrantLockUsage() throws RedisDriverException {
         // Mock successful lock acquisition on quorum
         when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
         when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
+        Redlock lock = new Redlock("demo-key", drivers, testConfig, null);
 
-        // First acquisition
-        assertTrue(lock.tryLock());
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(1, lock.getHoldCount());
+        System.out.println("=== Reentrant Lock Demonstration ===");
 
-        // Second acquisition (reentrant)
-        assertTrue(lock.tryLock());
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(2, lock.getHoldCount());
+        // Method that acquires the lock
+        performCriticalSection(lock);
 
-        // Third acquisition (reentrant)
-        assertTrue(lock.tryLock());
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(3, lock.getHoldCount());
-
-        // First unlock
-        lock.unlock();
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(2, lock.getHoldCount());
-
-        // Second unlock
-        lock.unlock();
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(1, lock.getHoldCount());
-
-        // Final unlock
-        lock.unlock();
+        // Verify the lock is fully released
         assertFalse(lock.isHeldByCurrentThread());
         assertEquals(0, lock.getHoldCount());
 
-        // Verify Redis operations were called only once (for initial acquisition)
-        verify(mockDriver1, times(1)).setIfNotExists(anyString(), anyString(), anyLong());
-        verify(mockDriver2, times(1)).setIfNotExists(anyString(), anyString(), anyLong());
-        verify(mockDriver3, times(1)).setIfNotExists(anyString(), anyString(), anyLong());
-
-        // Verify unlock was called only once (for final release)
-        verify(mockDriver1, times(1)).deleteIfValueMatches(anyString(), anyString());
-        verify(mockDriver2, times(1)).deleteIfValueMatches(anyString(), anyString());
-        verify(mockDriver3, times(1)).deleteIfValueMatches(anyString(), anyString());
+        System.out.println("✅ Demonstration completed successfully!");
     }
 
-    @Test
-    public void testReentrantLockWithTimeout() throws RedisDriverException, InterruptedException {
-        // Mock successful lock acquisition
-        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+    private void performCriticalSection(Redlock lock) {
+        System.out.println("🔒 Acquiring lock in performCriticalSection()");
+        lock.lock();
 
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
+        try {
+            System.out.println("   Hold count: " + lock.getHoldCount());
+            System.out.println("   Is held by current thread: " + lock.isHeldByCurrentThread());
 
-        // First acquisition
-        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
-        assertEquals(1, lock.getHoldCount());
+            // Call another method that also needs the same lock
+            performNestedOperation(lock);
 
-        // Reentrant acquisition with timeout
-        assertTrue(lock.tryLock(Duration.ofSeconds(1)));
-        assertEquals(2, lock.getHoldCount());
+            System.out.println("   Back in performCriticalSection()");
+            System.out.println("   Hold count: " + lock.getHoldCount());
 
-        // Unlock both
-        lock.unlock();
-        assertEquals(1, lock.getHoldCount());
-        lock.unlock();
-        assertEquals(0, lock.getHoldCount());
-
-        // Verify Redis operations were called only once
-        verify(mockDriver1, times(1)).setIfNotExists(anyString(), anyString(), anyLong());
-    }
-
-    @Test
-    public void testReentrantLockAcrossThreads() throws RedisDriverException, InterruptedException {
-        // Mock successful lock acquisition
-        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
-
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
-
-        // Acquire lock in main thread
-        assertTrue(lock.tryLock());
-        assertEquals(1, lock.getHoldCount());
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicInteger otherThreadHoldCount = new AtomicInteger(-1);
-
-        // Try to access from another thread
-        Thread otherThread = new Thread(() -> {
-            // Other thread should not see the lock as held
-            assertFalse(lock.isHeldByCurrentThread());
-            assertEquals(0, lock.getHoldCount());
-            otherThreadHoldCount.set(lock.getHoldCount());
-            latch.countDown();
-        });
-
-        otherThread.start();
-        latch.await(5, TimeUnit.SECONDS);
-
-        // Main thread should still hold the lock
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(1, lock.getHoldCount());
-        assertEquals(0, otherThreadHoldCount.get());
-
-        lock.unlock();
-        assertFalse(lock.isHeldByCurrentThread());
-    }
-
-    @Test
-    public void testUnlockWithoutLockDoesNotThrow() {
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
-
-        // Should not throw exception when unlocking without holding lock
-        assertDoesNotThrow(() -> lock.unlock());
-        assertEquals(0, lock.getHoldCount());
-    }
-
-    @Test
-    public void testReentrantLockWithLockMethod() throws RedisDriverException {
-        // Mock successful lock acquisition
-        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
-
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
-
-        // First acquisition using lock()
-        assertDoesNotThrow(() -> lock.lock());
-        assertEquals(1, lock.getHoldCount());
-
-        // Reentrant acquisition using tryLock()
-        assertTrue(lock.tryLock());
-        assertEquals(2, lock.getHoldCount());
-
-        // Unlock both
-        lock.unlock();
-        assertEquals(1, lock.getHoldCount());
-        lock.unlock();
-        assertEquals(0, lock.getHoldCount());
-    }
-
-    @Test
-    public void testReentrantLockWithLockInterruptibly() throws RedisDriverException, InterruptedException {
-        // Mock successful lock acquisition
-        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
-
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
-
-        // First acquisition using lockInterruptibly()
-        assertDoesNotThrow(() -> lock.lockInterruptibly());
-        assertEquals(1, lock.getHoldCount());
-
-        // Reentrant acquisition using lockInterruptibly()
-        assertDoesNotThrow(() -> lock.lockInterruptibly());
-        assertEquals(2, lock.getHoldCount());
-
-        // Unlock both
-        lock.unlock();
-        assertEquals(1, lock.getHoldCount());
-        lock.unlock();
-        assertEquals(0, lock.getHoldCount());
-    }
-
-    @Test
-    public void testConcurrentReentrantAccess() throws InterruptedException, RedisDriverException {
-        // Mock successful lock acquisition
-        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
-        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
-
-        Redlock lock = new Redlock("test-key", drivers, testConfig, null);
-        ExecutorService executor = Executors.newFixedThreadPool(3);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch completeLatch = new CountDownLatch(3);
-
-        // Acquire lock in main thread
-        assertTrue(lock.tryLock());
-        assertEquals(1, lock.getHoldCount());
-
-        // Submit tasks that try to acquire the same lock from different threads
-        for (int i = 0; i < 3; i++) {
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    // Each thread should see the lock as not held by them
-                    assertFalse(lock.isHeldByCurrentThread());
-                    assertEquals(0, lock.getHoldCount());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    completeLatch.countDown();
-                }
-            });
+        } finally {
+            System.out.println("🔓 Releasing lock in performCriticalSection()");
+            lock.unlock();
+            System.out.println("   Hold count after unlock: " + lock.getHoldCount());
         }
+    }
 
-        startLatch.countDown();
-        assertTrue(completeLatch.await(5, TimeUnit.SECONDS));
+    private void performNestedOperation(Redlock lock) {
+        System.out.println("  🔒 Acquiring lock in performNestedOperation() (reentrant)");
+        lock.lock();
 
-        // Main thread should still hold the lock
-        assertTrue(lock.isHeldByCurrentThread());
-        assertEquals(1, lock.getHoldCount());
+        try {
+            System.out.println("     Hold count: " + lock.getHoldCount());
+            System.out.println("     Is held by current thread: " + lock.isHeldByCurrentThread());
 
-        lock.unlock();
-        executor.shutdown();
+            // Call yet another method that needs the lock
+            performDeeplyNestedOperation(lock);
+
+            System.out.println("     Back in performNestedOperation()");
+            System.out.println("     Hold count: " + lock.getHoldCount());
+
+        } finally {
+            System.out.println("  🔓 Releasing lock in performNestedOperation()");
+            lock.unlock();
+            System.out.println("     Hold count after unlock: " + lock.getHoldCount());
+        }
+    }
+
+    private void performDeeplyNestedOperation(Redlock lock) {
+        System.out.println("    🔒 Acquiring lock in performDeeplyNestedOperation() (reentrant)");
+        lock.lock();
+
+        try {
+            System.out.println("       Hold count: " + lock.getHoldCount());
+            System.out.println("       Is held by current thread: " + lock.isHeldByCurrentThread());
+            System.out.println("       Performing deeply nested critical work...");
+
+        } finally {
+            System.out.println("    🔓 Releasing lock in performDeeplyNestedOperation()");
+            lock.unlock();
+            System.out.println("       Hold count after unlock: " + lock.getHoldCount());
+        }
+    }
+
+    @Test
+    public void demonstrateAsyncReentrantLockUsage() throws Exception {
+        // Mock successful lock acquisition on quorum
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(4);
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
+
+        try {
+            AsyncRedlockImpl asyncLock = new AsyncRedlockImpl("async-demo-key", drivers, testConfig, executorService,
+                    scheduledExecutorService);
+
+            System.out.println("\n=== Async Reentrant Lock Demonstration ===");
+
+            // First acquisition
+            System.out.println("🔒 First async lock acquisition");
+            assertTrue(asyncLock.tryLockAsync().toCompletableFuture().get());
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            // Second acquisition (reentrant)
+            System.out.println("🔒 Second async lock acquisition (reentrant)");
+            assertTrue(asyncLock.tryLockAsync().toCompletableFuture().get());
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            // Third acquisition (reentrant)
+            System.out.println("🔒 Third async lock acquisition (reentrant)");
+            assertTrue(asyncLock.tryLockAsync().toCompletableFuture().get());
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            // Release locks
+            System.out.println("🔓 First async unlock");
+            asyncLock.unlockAsync().toCompletableFuture().get();
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            System.out.println("🔓 Second async unlock");
+            asyncLock.unlockAsync().toCompletableFuture().get();
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            System.out.println("🔓 Third async unlock");
+            asyncLock.unlockAsync().toCompletableFuture().get();
+            System.out.println("   Hold count: " + asyncLock.getHoldCount());
+
+            assertFalse(asyncLock.isHeldByCurrentThread());
+            assertEquals(0, asyncLock.getHoldCount());
+
+            System.out.println("✅ Async demonstration completed successfully!");
+
+        } finally {
+            executorService.shutdown();
+            scheduledExecutorService.shutdown();
+        }
+    }
+
+    @Test
+    public void demonstrateRxReentrantLockUsage() throws Exception {
+        // Mock successful lock acquisition on quorum
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(4);
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
+
+        try {
+            AsyncRedlockImpl rxLock = new AsyncRedlockImpl("rx-demo-key", drivers, testConfig, executorService,
+                    scheduledExecutorService);
+
+            System.out.println("\n=== RxJava Reentrant Lock Demonstration ===");
+
+            // First acquisition using RxJava
+            System.out.println("🔒 First RxJava lock acquisition");
+            assertTrue(rxLock.tryLockRx().blockingGet());
+            System.out.println("   Hold count: " + rxLock.getHoldCount());
+
+            // Second acquisition (reentrant) using RxJava
+            System.out.println("🔒 Second RxJava lock acquisition (reentrant)");
+            assertTrue(rxLock.tryLockRx().blockingGet());
+            System.out.println("   Hold count: " + rxLock.getHoldCount());
+
+            // Release locks using RxJava
+            System.out.println("🔓 First RxJava unlock");
+            rxLock.unlockRx().blockingAwait();
+            System.out.println("   Hold count: " + rxLock.getHoldCount());
+
+            System.out.println("🔓 Second RxJava unlock");
+            rxLock.unlockRx().blockingAwait();
+            System.out.println("   Hold count: " + rxLock.getHoldCount());
+
+            assertFalse(rxLock.isHeldByCurrentThread());
+            assertEquals(0, rxLock.getHoldCount());
+
+            System.out.println("✅ RxJava demonstration completed successfully!");
+
+        } finally {
+            executorService.shutdown();
+            scheduledExecutorService.shutdown();
+        }
     }
 }

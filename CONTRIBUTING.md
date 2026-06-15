@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to Redlock4j! This document provides guidelines and information for contributors.
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally
@@ -11,7 +11,7 @@ Thank you for your interest in contributing to Redlock4j! This document provides
 5. **Run tests locally** to ensure everything works
 6. **Submit a pull request**
 
-## 🧪 Testing
+## Testing
 
 ### Test Organization
 Tests are organized using JUnit 5 `@Tag` annotations and Maven lifecycle phases:
@@ -43,7 +43,7 @@ mvn verify jacoco:report
 mvn org.owasp:dependency-check-maven:check
 ```
 
-## 📝 Code Guidelines
+## Code Guidelines
 
 ### Code Style
 We use automated code formatting to ensure consistency across the codebase:
@@ -82,7 +82,7 @@ All Java files must include an [SPDX-compliant](https://spdx.dev/learn/handling-
 - Use **Testcontainers** for integration tests
 - Follow **AAA pattern** (Arrange, Act, Assert)
 
-## 🔄 Pull Request Process
+## Pull Request Process
 
 ### Before Submitting
 1. **Rebase** your branch on the latest `main`
@@ -107,7 +107,7 @@ When you submit a PR, our automation will:
 4. **Check code style** and license headers
 5. **Generate coverage reports**
 
-## 🏗️ Development Setup
+## Development Setup
 
 ### Prerequisites
 - **Java 8+** (we test against 8, 11, 17, 21)
@@ -125,7 +125,7 @@ export TESTCONTAINERS_RYUK_DISABLED=true
 export DOCKER_HOST=unix:///var/run/docker.sock
 ```
 
-## 🐛 Bug Reports
+## Bug Reports
 
 When reporting bugs:
 1. **Search existing issues** first
@@ -134,7 +134,7 @@ When reporting bugs:
 4. **Provide environment details**
 5. **Add relevant logs/stack traces**
 
-## 💡 Feature Requests
+## Feature Requests
 
 For new features:
 1. **Check existing issues** and discussions
@@ -143,7 +143,7 @@ For new features:
 4. **Consider backward compatibility**
 5. **Discuss implementation approach**
 
-## 📚 Documentation
+## Documentation
 
 Help improve documentation:
 - **README.md** - Main project documentation
@@ -171,7 +171,7 @@ docker run --rm -p 8000:8000 -v ${PWD}:/docs squidfunk/mkdocs-material
 docker run --rm -v ${PWD}:/docs squidfunk/mkdocs-material build --strict
 ```
 
-## 🎯 Areas for Contribution
+## Areas for Contribution
 
 We welcome contributions in:
 - **Bug fixes** and stability improvements
@@ -181,7 +181,7 @@ We welcome contributions in:
 - **Test coverage expansion**
 - **Example applications**
 
-## 🤝 Code of Conduct
+## Code of Conduct
 
 - Be **respectful** and **inclusive**
 - **Help others** learn and grow
@@ -189,11 +189,11 @@ We welcome contributions in:
 - **Collaborate** effectively
 - **Have fun** building great software!
 
-## 📞 Getting Help
+## Getting Help
 
 - **GitHub Issues** - For bugs and feature requests
 - **GitHub Discussions** - For questions and ideas
 - **Code Review** - Learn from PR feedback
 
 
-Thank you for contributing to Redlock4j! 🚀
+Thank you for contributing to Redlock4j!

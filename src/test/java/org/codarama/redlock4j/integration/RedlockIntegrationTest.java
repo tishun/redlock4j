@@ -20,7 +20,9 @@ import org.testcontainers.utility.DockerImageName;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 
 /**
@@ -208,5 +210,165 @@ public class RedlockIntegrationTest {
 
         System.out.println("Redis containers running on ports: " + redis1.getMappedPort(6379) + ", "
                 + redis2.getMappedPort(6379) + ", " + redis3.getMappedPort(6379));
+    }
+
+    // ========== Low TTL / High Latency Tests ==========
+
+    /**
+     * Tests lock behavior with a very short TTL (50ms) simulating edge cases where network latency approaches the lock
+     * TTL.
+     *
+     * This documents the expected behavior: with a TTL shorter than network round-trip, locks may expire before the
+     * acquiring client can use them.
+     */
+    @Test
+    @Tag("slow")
+    void testLowTTLLockBehavior() throws InterruptedException {
+        RedlockConfiguration lowTtlConfig = RedlockConfiguration.builder()
+                .addRedisNode("localhost", redis1.getMappedPort(6379))
+                .addRedisNode("localhost", redis2.getMappedPort(6379))
+                .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofMillis(100)) // Very
+                                                                                                                  // low
+                                                                                                                  // TTL
+                .lockAcquisitionTimeout(Duration.ofSeconds(5)).retryDelay(Duration.ofMillis(10)).maxRetryAttempts(50)
+                .build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(lowTtlConfig)) {
+            Lock lock = manager.createLock("low-ttl-test");
+
+            assertTrue(lock.tryLock(5, TimeUnit.SECONDS), "Should acquire low-TTL lock");
+
+            // Simulate work that takes longer than TTL
+            Thread.sleep(150);
+
+            // Lock has now expired - another client could acquire it
+            // This documents the behavior, not a bug
+            lock.unlock(); // May be a no-op if already expired
+        }
+    }
+
+    /**
+     * Tests rapid lock acquisition and release cycles with low TTL. Validates that clock drift compensation is working
+     * correctly.
+     */
+    @Test
+    @Tag("slow")
+    void testRapidLockCyclesWithLowTTL() throws InterruptedException {
+        RedlockConfiguration lowTtlConfig = RedlockConfiguration.builder()
+                .addRedisNode("localhost", redis1.getMappedPort(6379))
+                .addRedisNode("localhost", redis2.getMappedPort(6379))
+                .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofMillis(200))
+                .lockAcquisitionTimeout(Duration.ofSeconds(2)).retryDelay(Duration.ofMillis(10)).maxRetryAttempts(20)
+                .clockDriftFactor(0.01) // 1% clock drift
+                .build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(lowTtlConfig)) {
+            int cycles = 10;
+            int successCount = 0;
+
+            for (int i = 0; i < cycles; i++) {
+                Lock lock = manager.createLock("rapid-cycle-" + i);
+                if (lock.tryLock(2, TimeUnit.SECONDS)) {
+                    try {
+                        successCount++;
+                        // Very quick operation within TTL
+                        Thread.sleep(5);
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            }
+
+            assertEquals(cycles, successCount, "All rapid lock cycles should succeed");
+        }
+    }
+
+    /**
+     * Tests that lock validity time accounts for acquisition latency. With network latency, the effective lock time is
+     * reduced.
+     */
+    @Test
+    void testLockValidityWithSimulatedLatency() throws InterruptedException {
+        RedlockConfiguration config = RedlockConfiguration.builder()
+                .addRedisNode("localhost", redis1.getMappedPort(6379))
+                .addRedisNode("localhost", redis2.getMappedPort(6379))
+                .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofMillis(500))
+                .lockAcquisitionTimeout(Duration.ofSeconds(5)).retryDelay(Duration.ofMillis(20)).maxRetryAttempts(20)
+                .build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(config)) {
+            // Acquire lock
+            Lock lock = manager.createLock("latency-test");
+            long startTime = System.currentTimeMillis();
+
+            assertTrue(lock.tryLock(5, TimeUnit.SECONDS));
+
+            long acquisitionTime = System.currentTimeMillis() - startTime;
+            System.out.println("Lock acquisition took: " + acquisitionTime + "ms (TTL=500ms)");
+
+            // The effective lock validity is TTL - acquisition_time - clock_drift
+            // With 500ms TTL and typical <50ms acquisition, we should have ~400+ms validity
+
+            // Work for part of the remaining validity
+            Thread.sleep(100);
+
+            // Lock should still be valid
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Tests contention under low TTL conditions. Multiple threads competing for the same lock with short TTL.
+     */
+    @Test
+    @Tag("slow")
+    void testContentionWithLowTTL() throws InterruptedException {
+        RedlockConfiguration lowTtlConfig = RedlockConfiguration.builder()
+                .addRedisNode("localhost", redis1.getMappedPort(6379))
+                .addRedisNode("localhost", redis2.getMappedPort(6379))
+                .addRedisNode("localhost", redis3.getMappedPort(6379)).defaultLockTimeout(Duration.ofMillis(150))
+                .lockAcquisitionTimeout(Duration.ofSeconds(10)).retryDelay(Duration.ofMillis(10)).maxRetryAttempts(100)
+                .build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(lowTtlConfig)) {
+            int threadCount = 3;
+            AtomicInteger successCount = new AtomicInteger(0);
+            CountDownLatch start = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(threadCount);
+
+            for (int i = 0; i < threadCount; i++) {
+                new Thread(() -> {
+                    try {
+                        Lock lock = manager.createLock("contention-low-ttl");
+                        start.await();
+
+                        // Each thread tries to acquire multiple times
+                        for (int j = 0; j < 3; j++) {
+                            if (lock.tryLock(3, TimeUnit.SECONDS)) {
+                                try {
+                                    successCount.incrementAndGet();
+                                    Thread.sleep(20); // Quick work
+                                } finally {
+                                    lock.unlock();
+                                }
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                }).start();
+            }
+
+            start.countDown();
+            assertTrue(done.await(60, TimeUnit.SECONDS));
+
+            // With low TTL and contention, some acquisitions may fail
+            // but overall pattern should work
+            System.out.println("Low TTL contention: " + successCount.get() + "/" + (threadCount * 3)
+                    + " lock acquisitions succeeded");
+            assertTrue(successCount.get() > 0, "At least some lock acquisitions should succeed");
+        }
     }
 }

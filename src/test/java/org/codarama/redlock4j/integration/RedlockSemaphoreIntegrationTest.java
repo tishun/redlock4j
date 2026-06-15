@@ -64,19 +64,7 @@ public class RedlockSemaphoreIntegrationTest {
         }
     }
 
-    @Test
-    void shouldRejectZeroPermits() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            assertThrows(IllegalArgumentException.class, () -> manager.createSemaphore("zero-permits", 0));
-        }
-    }
-
-    @Test
-    void shouldRejectNegativePermits() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            assertThrows(IllegalArgumentException.class, () -> manager.createSemaphore("negative-permits", -1));
-        }
-    }
+    // Note: Validation tests (shouldRejectZeroPermits, shouldRejectNegativePermits) are in RedlockSemaphoreTest (unit)
 
     // ========== acquire() / release() ==========
 
@@ -132,23 +120,7 @@ public class RedlockSemaphoreIntegrationTest {
         }
     }
 
-    // ========== Permit Validation ==========
-
-    @Test
-    void shouldRejectAcquiringMorePermitsThanMax() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockSemaphore semaphore = manager.createSemaphore("exceed-max", 3);
-            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(5, Duration.ofSeconds(1)));
-        }
-    }
-
-    @Test
-    void shouldRejectAcquiringZeroPermits() {
-        try (RedlockManager manager = RedlockManager.withJedis(testConfiguration)) {
-            RedlockSemaphore semaphore = manager.createSemaphore("zero-acquire", 3);
-            assertThrows(IllegalArgumentException.class, () -> semaphore.tryAcquire(0, Duration.ofSeconds(1)));
-        }
-    }
+    // Note: Permit validation tests are in RedlockSemaphoreTest (unit)
 
     // ========== Concurrent Access ==========
 

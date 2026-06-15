@@ -9,6 +9,7 @@ import org.codarama.redlock4j.RedlockManager;
 import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Integration tests for wait strategy functionality.
  */
+@Tag("integration")
 @Testcontainers
 class WaitStrategyIntegrationTest {
 
