@@ -13,7 +13,16 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 /**
@@ -34,6 +43,22 @@ import java.util.function.Function;
 public class MultiNodeStrategy implements LockExecutionStrategy {
 
     private static final Logger logger = LoggerFactory.getLogger(MultiNodeStrategy.class);
+
+    /**
+     * Shared executor for fanning out per-node Redis operations in parallel. Cached pool of daemon threads with idle
+     * timeout so it scales with concurrent acquisition load without blocking JVM shutdown.
+     */
+    private static final Executor FANOUT_EXECUTOR = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+            new SynchronousQueue<>(), new ThreadFactory() {
+                private final AtomicInteger counter = new AtomicInteger();
+
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "redlock4j-multinode-" + counter.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
 
     private final List<RedisDriver> drivers;
     private final int quorum;
@@ -62,17 +87,8 @@ public class MultiNodeStrategy implements LockExecutionStrategy {
     @Override
     public LockResult acquireLock(String key, String value, long timeoutMs) {
         Instant startTime = Instant.now();
-        int successfulNodes = 0;
 
-        for (RedisDriver driver : drivers) {
-            try {
-                if (driver.setIfNotExists(key, value, timeoutMs)) {
-                    successfulNodes++;
-                }
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to acquire lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
+        int successfulNodes = fanOut("acquire lock", driver -> driver.setIfNotExists(key, value, timeoutMs));
 
         Duration elapsed = Duration.between(startTime, Instant.now());
         long validityTime = calculateValidityTime(timeoutMs, elapsed.toMillis());
@@ -94,30 +110,19 @@ public class MultiNodeStrategy implements LockExecutionStrategy {
 
     @Override
     public void releaseLock(String key, String value) {
-        for (RedisDriver driver : drivers) {
-            try {
-                driver.deleteIfValueMatches(key, value);
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to release lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
+        fanOut("release lock", driver -> {
+            driver.deleteIfValueMatches(key, value);
+            return Boolean.TRUE;
+        });
         logger.debug("Lock released on all nodes: key={}", key);
     }
 
     @Override
     public boolean extendLock(String key, String currentValue, long newTimeoutMs) {
         Instant startTime = Instant.now();
-        int successfulNodes = 0;
 
-        for (RedisDriver driver : drivers) {
-            try {
-                if (driver.setIfValueMatches(key, currentValue, currentValue, newTimeoutMs)) {
-                    successfulNodes++;
-                }
-            } catch (RedisDriverException e) {
-                logger.warn("Failed to extend lock on {}: {}", driver.getIdentifier(), e.getMessage());
-            }
-        }
+        int successfulNodes = fanOut("extend lock",
+                driver -> driver.setIfValueMatches(key, currentValue, currentValue, newTimeoutMs));
 
         Duration elapsed = Duration.between(startTime, Instant.now());
         long validityTime = calculateValidityTime(newTimeoutMs, elapsed.toMillis());
@@ -137,18 +142,49 @@ public class MultiNodeStrategy implements LockExecutionStrategy {
 
     @Override
     public int executeOnNodes(Function<RedisDriver, Boolean> operation) {
-        int successCount = 0;
+        return fanOut("execute operation", operation::apply);
+    }
+
+    /**
+     * Fans an operation out across all drivers in parallel and returns the count of nodes where the operation returned
+     * {@code Boolean.TRUE}. Per-node exceptions are logged and counted as failures so a single slow or down node cannot
+     * block the quorum.
+     */
+    private int fanOut(String description, FanOutOperation operation) {
+        List<CompletableFuture<Boolean>> futures = new ArrayList<>(drivers.size());
         for (RedisDriver driver : drivers) {
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                try {
+                    return Boolean.TRUE.equals(operation.apply(driver));
+                } catch (Exception e) {
+                    logger.warn("Failed to {} on {}: {}", description, driver.getIdentifier(), e.getMessage());
+                    return Boolean.FALSE;
+                }
+            }, FANOUT_EXECUTOR));
+        }
+
+        int successCount = 0;
+        for (CompletableFuture<Boolean> future : futures) {
             try {
-                Boolean result = operation.apply(driver);
-                if (Boolean.TRUE.equals(result)) {
+                if (Boolean.TRUE.equals(future.get())) {
                     successCount++;
                 }
-            } catch (Exception e) {
-                logger.warn("Error executing operation on {}: {}", driver.getIdentifier(), e.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (ExecutionException e) {
+                logger.warn("Unexpected error during {}: {}", description, e.getMessage());
             }
         }
         return successCount;
+    }
+
+    /**
+     * Functional interface for per-node operations that may throw checked Redis driver exceptions.
+     */
+    @FunctionalInterface
+    private interface FanOutOperation {
+        Boolean apply(RedisDriver driver) throws RedisDriverException;
     }
 
     @Override

@@ -1,0 +1,202 @@
+{
+  "title" : "ReadWriteLock",
+  "generatedAt" : "2026-06-15T16:05:53.105072Z",
+  "config" : {
+    "redisNodeCount" : 3,
+    "clientCount" : 10,
+    "benchmarkDurationMs" : 60000,
+    "warmupDurationMs" : 30000,
+    "workSimulationTimeMs" : 50,
+    "lockTimeoutMs" : 30000,
+    "lockAcquisitionTimeoutMs" : 60000,
+    "lockResourceName" : "benchmark-fair-lock",
+    "multiLockResourceCount" : 5
+  },
+  "results" : [ {
+    "implementationType" : "redisson-reader",
+    "clientCount" : 8,
+    "totalSuccessfulOps" : 9217,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 153.61539977176437,
+    "avgOpsPerSecondPerClient" : 19.201924971470547,
+    "opsPerSecondPerClientStdev" : 0.019677973091967525,
+    "opsPerSecondPerClientCi95Half" : 0.013636139649069918,
+    "avgWaitTimeMs" : 0.9391922212370032,
+    "avgHoldTimeMs" : 50.02672539902383,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 3098,
+      "max" : 13802,
+      "p90" : 1578,
+      "mean" : 938,
+      "p50" : 787,
+      "p95" : 1920,
+      "p75" : 1130
+    },
+    "validation" : {
+      "totalEvents" : 32,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode-reader",
+    "clientCount" : 8,
+    "totalSuccessfulOps" : 3543,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 59.07161117901987,
+    "avgOpsPerSecondPerClient" : 7.3839513973774835,
+    "opsPerSecondPerClientStdev" : 1.458537524174648,
+    "opsPerSecondPerClientCi95Half" : 1.010714938479753,
+    "avgWaitTimeMs" : 86.22786999240297,
+    "avgHoldTimeMs" : 50.00520677979282,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 452207,
+      "max" : 636015,
+      "p90" : 213040,
+      "mean" : 86227,
+      "p50" : 58444,
+      "p95" : 277235,
+      "p75" : 122436
+    },
+    "validation" : {
+      "totalEvents" : 1563,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-rwlock-reader",
+    "clientCount" : 8,
+    "totalSuccessfulOps" : 3210,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 53.58673234771001,
+    "avgOpsPerSecondPerClient" : 6.698341543463751,
+    "opsPerSecondPerClientStdev" : 1.4734786700914049,
+    "opsPerSecondPerClientCi95Half" : 1.0210686243642606,
+    "avgWaitTimeMs" : 98.96458969377471,
+    "avgHoldTimeMs" : 50.00932495815257,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 431941,
+      "max" : 508208,
+      "p90" : 236833,
+      "mean" : 98963,
+      "p50" : 65604,
+      "p95" : 311223,
+      "p75" : 133819
+    },
+    "validation" : {
+      "totalEvents" : 1426,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redisson-writer",
+    "clientCount" : 2,
+    "totalSuccessfulOps" : 2,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 0.07398345113884638,
+    "avgOpsPerSecondPerClient" : 0.03699172556942319,
+    "opsPerSecondPerClientStdev" : 2.0802990732073854E-4,
+    "opsPerSecondPerClientCi95Half" : 2.8831474198596233E-4,
+    "avgWaitTimeMs" : 26977.794708499998,
+    "avgHoldTimeMs" : 50.002979499999995,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 26977794,
+      "max" : 26977794,
+      "p90" : 26977794,
+      "mean" : 26977794,
+      "p50" : 26977794,
+      "p95" : 26977794,
+      "p75" : 26977794
+    },
+    "validation" : {
+      "totalEvents" : 32,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode-writer",
+    "clientCount" : 2,
+    "totalSuccessfulOps" : 1036,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 17.26450749345652,
+    "avgOpsPerSecondPerClient" : 8.63225374672826,
+    "opsPerSecondPerClientStdev" : 0.09416740114704245,
+    "opsPerSecondPerClientCi95Half" : 0.13050935951886367,
+    "avgWaitTimeMs" : 60.99441234387719,
+    "avgHoldTimeMs" : 50.00259181538753,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 90528,
+      "max" : 1449909,
+      "p90" : 59401,
+      "mean" : 60993,
+      "p50" : 57704,
+      "p95" : 60295,
+      "p75" : 58483
+    },
+    "validation" : {
+      "totalEvents" : 1563,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-rwlock-writer",
+    "clientCount" : 2,
+    "totalSuccessfulOps" : 931,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 15.511247795354276,
+    "avgOpsPerSecondPerClient" : 7.755623897677138,
+    "opsPerSecondPerClientStdev" : 0.10675985846090473,
+    "opsPerSecondPerClientCi95Half" : 0.1479616149573946,
+    "avgWaitTimeMs" : 70.82498696262519,
+    "avgHoldTimeMs" : 50.00880279989615,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 72728,
+      "max" : 3583183,
+      "p90" : 67367,
+      "mean" : 70824,
+      "p50" : 63961,
+      "p95" : 68532,
+      "p75" : 65647
+    },
+    "validation" : {
+      "totalEvents" : 1426,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  } ]
+}

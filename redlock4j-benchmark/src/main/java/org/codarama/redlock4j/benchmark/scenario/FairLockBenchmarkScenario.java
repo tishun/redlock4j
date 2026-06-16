@@ -90,19 +90,16 @@ public class FairLockBenchmarkScenario {
                 });
             }
 
-            // Warmup phase
-            logger.info("Warmup phase: {} seconds", config.getWarmupDuration().getSeconds());
-            Thread.sleep(config.getWarmupDuration().toMillis());
-
-            // Start all clients simultaneously
-            logger.info("Starting benchmark execution...");
+            // Start all clients simultaneously; warmup-discard happens inside each client
+            logger.info("Starting benchmark execution (warmup {}s + measure {}s, clients do warmup-discard internally)...",
+                    config.getWarmupDuration().getSeconds(), config.getBenchmarkDuration().getSeconds());
             long startTime = System.currentTimeMillis();
             startLatch.countDown();
 
-            // Wait for completion with progress logging
+            long totalDurationMs = config.getWarmupDuration().toMillis() + config.getBenchmarkDuration().toMillis();
             while (!completeLatch.await(config.getReportingInterval().toMillis(), TimeUnit.MILLISECONDS)) {
                 long elapsed = System.currentTimeMillis() - startTime;
-                long remaining = config.getBenchmarkDuration().toMillis() - elapsed;
+                long remaining = totalDurationMs - elapsed;
                 logger.info("Progress: {} elapsed, {} remaining", formatDuration(elapsed), formatDuration(remaining));
             }
 

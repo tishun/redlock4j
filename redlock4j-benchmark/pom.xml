@@ -11,7 +11,7 @@
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <jedis.version>7.1.0</jedis.version>
+    <jedis.version>7.4.1</jedis.version>
     <lettuce.version>7.1.0.RELEASE</lettuce.version>
     <redisson.version>3.46.0</redisson.version>
     <spring-integration.version>6.4.10</spring-integration.version>

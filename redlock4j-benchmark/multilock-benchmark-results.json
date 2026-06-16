@@ -1,0 +1,112 @@
+{
+  "title" : "MultiLock",
+  "generatedAt" : "2026-06-15T16:01:18.421252Z",
+  "config" : {
+    "redisNodeCount" : 3,
+    "clientCount" : 5,
+    "benchmarkDurationMs" : 60000,
+    "warmupDurationMs" : 30000,
+    "workSimulationTimeMs" : 50,
+    "lockTimeoutMs" : 30000,
+    "lockAcquisitionTimeoutMs" : 60000,
+    "lockResourceName" : "benchmark-fair-lock",
+    "multiLockResourceCount" : 5
+  },
+  "results" : [ {
+    "implementationType" : "redisson",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1022,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 17.05015326003449,
+    "avgOpsPerSecondPerClient" : 3.410030652006898,
+    "opsPerSecondPerClientStdev" : 1.2236718103220292,
+    "opsPerSecondPerClientCi95Half" : 1.072595633211872,
+    "avgWaitTimeMs" : 272.92606806895094,
+    "avgHoldTimeMs" : 50.020637363991845,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 1192186,
+      "max" : 1439439,
+      "p90" : 583926,
+      "mean" : 272925,
+      "p50" : 190208,
+      "p999" : 1439439,
+      "p95" : 789649,
+      "p75" : 348389
+    },
+    "validation" : {
+      "totalEvents" : 1537,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1018,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 16.973326435738322,
+    "avgOpsPerSecondPerClient" : 3.3946652871476646,
+    "opsPerSecondPerClientStdev" : 1.2426388367874797,
+    "opsPerSecondPerClientCi95Half" : 1.0892209649309237,
+    "avgWaitTimeMs" : 302.9894674610356,
+    "avgHoldTimeMs" : 50.009192451060095,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 1709499,
+      "max" : 2087382,
+      "p90" : 649731,
+      "mean" : 302988,
+      "p50" : 202917,
+      "p999" : 2087382,
+      "p95" : 1038258,
+      "p75" : 373225
+    },
+    "validation" : {
+      "totalEvents" : 1539,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-multilock",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1061,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 17.71924395180982,
+    "avgOpsPerSecondPerClient" : 3.543848790361964,
+    "opsPerSecondPerClientStdev" : 0.7830012104488336,
+    "opsPerSecondPerClientCi95Half" : 0.6863308217470585,
+    "avgWaitTimeMs" : 237.40170136893624,
+    "avgHoldTimeMs" : 50.00750716650992,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 1057619,
+      "max" : 1489792,
+      "p90" : 556400,
+      "mean" : 237400,
+      "p50" : 170985,
+      "p999" : 1489792,
+      "p95" : 687449,
+      "p75" : 298446
+    },
+    "validation" : {
+      "totalEvents" : 1598,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  } ]
+}

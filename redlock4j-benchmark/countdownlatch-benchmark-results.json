@@ -1,0 +1,88 @@
+{
+  "title" : "CountDownLatch",
+  "generatedAt" : "2026-06-15T16:15:01.353284Z",
+  "config" : {
+    "redisNodeCount" : 3,
+    "clientCount" : 5,
+    "benchmarkDurationMs" : 60000,
+    "warmupDurationMs" : 30000,
+    "workSimulationTimeMs" : 50,
+    "lockTimeoutMs" : 30000,
+    "lockAcquisitionTimeoutMs" : 60000,
+    "lockResourceName" : "benchmark-fair-lock",
+    "multiLockResourceCount" : 5
+  },
+  "results" : [ {
+    "implementationType" : "redisson",
+    "clientCount" : 1,
+    "totalSuccessfulOps" : 3542,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 59.02251253936778,
+    "avgOpsPerSecondPerClient" : 59.02251253936778,
+    "opsPerSecondPerClientStdev" : 0.0,
+    "opsPerSecondPerClientCi95Half" : 0.0,
+    "avgWaitTimeMs" : 16.9135684635799,
+    "avgHoldTimeMs" : 0.0,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "max" : 40818,
+      "p90" : 18579,
+      "p50" : 17170,
+      "p95" : 19225,
+      "p75" : 17869,
+      "p99" : 22568,
+      "mean" : 16913
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode",
+    "clientCount" : 1,
+    "totalSuccessfulOps" : 3500,
+    "totalFailedOps" : 1,
+    "successRatePct" : 99.97143673236218,
+    "aggregateOpsPerSecond" : 58.19076595673932,
+    "avgOpsPerSecondPerClient" : 58.19076595673932,
+    "opsPerSecondPerClientStdev" : 0.0,
+    "opsPerSecondPerClientCi95Half" : 0.0,
+    "avgWaitTimeMs" : 15.674230057428572,
+    "avgHoldTimeMs" : 0.0,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "max" : 31027,
+      "p90" : 17426,
+      "p50" : 16167,
+      "p95" : 17889,
+      "p75" : 16850,
+      "p99" : 19866,
+      "mean" : 15673
+    }
+  }, {
+    "implementationType" : "redlock4j",
+    "clientCount" : 1,
+    "totalSuccessfulOps" : 3601,
+    "totalFailedOps" : 1,
+    "successRatePct" : 99.97223764575236,
+    "aggregateOpsPerSecond" : 59.91182097995175,
+    "avgOpsPerSecondPerClient" : 59.91182097995175,
+    "opsPerSecondPerClientStdev" : 0.0,
+    "opsPerSecondPerClientCi95Half" : 0.0,
+    "avgWaitTimeMs" : 15.180534230769231,
+    "avgHoldTimeMs" : 0.0,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "max" : 115837,
+      "p90" : 17196,
+      "p50" : 15285,
+      "p95" : 17813,
+      "p75" : 16437,
+      "p99" : 19893,
+      "mean" : 15180
+    }
+  } ]
+}

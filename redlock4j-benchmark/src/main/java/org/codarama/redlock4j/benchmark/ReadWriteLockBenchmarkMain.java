@@ -48,22 +48,26 @@ public class ReadWriteLockBenchmarkMain {
                 logger.info("\n========== REDISSON READWRITELOCK (SINGLE NODE) ==========\n");
                 List<BenchmarkResult> redissonResults = scenario.run(RedissonReadWriteLockClient::new);
                 CorrectnessValidator.ValidationResult redissonValidation = validator.validate(resultsStore);
-                allResults.add(aggregator.aggregate(redissonResults, redissonValidation));
+                allResults.addAll(aggregator.aggregateByImplementationType(redissonResults, redissonValidation));
 
                 logger.info("\n========== REDLOCK4J READWRITELOCK SINGLE-NODE MODE ==========\n");
                 List<BenchmarkResult> singleNodeResults = scenario.run(Redlock4jSingleNodeReadWriteLockClient::new);
                 CorrectnessValidator.ValidationResult singleNodeValidation = validator.validate(resultsStore);
-                allResults.add(aggregator.aggregate(singleNodeResults, singleNodeValidation));
+                allResults.addAll(aggregator.aggregateByImplementationType(singleNodeResults, singleNodeValidation));
 
                 logger.info("\n========== REDLOCK4J READWRITELOCK (3-NODE) ==========\n");
                 List<BenchmarkResult> multiNodeResults = scenario.run(Redlock4jReadWriteLockClient::new);
                 CorrectnessValidator.ValidationResult multiNodeValidation = validator.validate(resultsStore);
-                allResults.add(aggregator.aggregate(multiNodeResults, multiNodeValidation));
+                allResults.addAll(aggregator.aggregateByImplementationType(multiNodeResults, multiNodeValidation));
             }
         }
 
+        // Group all readers first, then all writers (stable sort preserves impl order within each role)
+        allResults.sort((a, b) -> Boolean.compare(
+                a.implementationType.endsWith("-writer"), b.implementationType.endsWith("-writer")));
+
         MarkdownReportGenerator reportGenerator = new MarkdownReportGenerator();
-        String report = reportGenerator.generate(config, allResults);
+        String report = reportGenerator.generate("ReadWriteLock", config, allResults);
 
         Path outputPath = Paths.get("rwlock-benchmark-results.md");
         try {
@@ -73,6 +77,15 @@ public class ReadWriteLockBenchmarkMain {
         } catch (Exception e) {
             logger.error("Failed to write report: {}", e.getMessage());
             System.out.println(report);
+        }
+
+        JsonReportGenerator jsonGenerator = new JsonReportGenerator();
+        String json = jsonGenerator.generate("ReadWriteLock", config, allResults);
+        Path jsonOutputPath = Paths.get("rwlock-benchmark-results.json");
+        try {
+            jsonGenerator.writeToFile(json, jsonOutputPath);
+        } catch (Exception e) {
+            logger.error("Failed to write JSON report: {}", e.getMessage());
         }
 
         System.out.println("\n" + report);

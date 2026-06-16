@@ -1,0 +1,202 @@
+{
+  "title" : "Distributed Lock",
+  "generatedAt" : "2026-06-15T15:45:04.347228Z",
+  "config" : {
+    "redisNodeCount" : 3,
+    "clientCount" : 5,
+    "benchmarkDurationMs" : 60000,
+    "warmupDurationMs" : 30000,
+    "workSimulationTimeMs" : 50,
+    "lockTimeoutMs" : 30000,
+    "lockAcquisitionTimeoutMs" : 60000,
+    "lockResourceName" : "benchmark-fair-lock",
+    "multiLockResourceCount" : 5
+  },
+  "results" : [ {
+    "implementationType" : "redisson",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1091,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 18.219729731885934,
+    "avgOpsPerSecondPerClient" : 3.643945946377187,
+    "opsPerSecondPerClientStdev" : 0.7282852023543905,
+    "opsPerSecondPerClientCi95Half" : 0.63837012603287,
+    "avgWaitTimeMs" : 228.80625464658414,
+    "avgHoldTimeMs" : 50.02439906110198,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 1486782,
+      "max" : 1886599,
+      "p90" : 629993,
+      "mean" : 228805,
+      "p50" : 89320,
+      "p95" : 914320,
+      "p75" : 342395
+    },
+    "validation" : {
+      "totalEvents" : 1639,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1093,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 18.328310757378034,
+    "avgOpsPerSecondPerClient" : 3.665662151475607,
+    "opsPerSecondPerClientStdev" : 3.2023636945434286,
+    "opsPerSecondPerClientCi95Half" : 2.8069955405931797,
+    "avgWaitTimeMs" : 406.725834718043,
+    "avgHoldTimeMs" : 50.01394005119315,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 3142396,
+      "max" : 3272320,
+      "p90" : 1198846,
+      "mean" : 406725,
+      "p50" : 133024,
+      "p95" : 1573656,
+      "p75" : 572609
+    },
+    "validation" : {
+      "totalEvents" : 1644,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-3node",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 23,
+    "totalFailedOps" : 5,
+    "successRatePct" : 82.14285714285714,
+    "aggregateOpsPerSecond" : 0.3771735290591251,
+    "avgOpsPerSecondPerClient" : 0.07543470581182501,
+    "opsPerSecondPerClientStdev" : 0.035724067407212595,
+    "opsPerSecondPerClientCi95Half" : 0.03131352571688231,
+    "avgWaitTimeMs" : 166.12947764761904,
+    "avgHoldTimeMs" : 50.00284293333333,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 406971,
+      "max" : 406971,
+      "p90" : 406971,
+      "mean" : 166128,
+      "p50" : 104842,
+      "p95" : 406971,
+      "p75" : 337742
+    },
+    "validation" : {
+      "totalEvents" : 185,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "spring-integration",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1106,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 20.294657240921563,
+    "avgOpsPerSecondPerClient" : 4.058931448184312,
+    "opsPerSecondPerClientStdev" : 0.800505632419941,
+    "opsPerSecondPerClientCi95Half" : 0.7016741241012794,
+    "avgWaitTimeMs" : 199.83917454160374,
+    "avgHoldTimeMs" : 50.00662257927626,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 5687493,
+      "max" : 15908574,
+      "p90" : 930,
+      "mean" : 199838,
+      "p50" : 648,
+      "p95" : 218039,
+      "p75" : 764
+    },
+    "validation" : {
+      "totalEvents" : 1663,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "shedlock-lettuce",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1123,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 18.93837900723612,
+    "avgOpsPerSecondPerClient" : 3.787675801447224,
+    "opsPerSecondPerClientStdev" : 1.2387096497966192,
+    "opsPerSecondPerClientCi95Half" : 1.085776880681438,
+    "avgWaitTimeMs" : 230.23130147224202,
+    "avgHoldTimeMs" : 50.03801120697934,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 3598404,
+      "max" : 5130364,
+      "p90" : 760011,
+      "mean" : 230230,
+      "p50" : 494,
+      "p95" : 1618169,
+      "p75" : 706
+    },
+    "validation" : {
+      "totalEvents" : 1689,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redpulsar",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1107,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 21.866724456107136,
+    "avgOpsPerSecondPerClient" : 4.373344891221427,
+    "opsPerSecondPerClientStdev" : 1.1416276655101916,
+    "opsPerSecondPerClientCi95Half" : 1.0006807695094706,
+    "avgWaitTimeMs" : 187.27340002934926,
+    "avgHoldTimeMs" : 50.020220456998,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 7771265,
+      "max" : 17503920,
+      "p90" : 1075,
+      "mean" : 187272,
+      "p50" : 656,
+      "p95" : 1630,
+      "p75" : 821
+    },
+    "validation" : {
+      "totalEvents" : 1664,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  } ]
+}

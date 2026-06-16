@@ -12,7 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,13 +52,23 @@ public class CountDownLatchBenchmarkScenario {
         List<Long> latencies = new ArrayList<>();
 
         int workers = config.getClientCount();
-        long endTime = System.currentTimeMillis() + config.getBenchmarkDuration().toMillis();
+        long now = System.currentTimeMillis();
+        long warmupEnd = now + config.getWarmupDuration().toMillis();
+        long endTime = warmupEnd + config.getBenchmarkDuration().toMillis();
         AtomicInteger completedLatches = new AtomicInteger(0);
+        boolean[] inWarmup = { config.getWarmupDuration().toMillis() > 0 };
 
         ExecutorService executor = Executors.newFixedThreadPool(workers + 1);
 
         try {
             while (System.currentTimeMillis() < endTime) {
+                if (inWarmup[0] && System.currentTimeMillis() >= warmupEnd) {
+                    inWarmup[0] = false;
+                    latencies.clear();
+                    result.reset();
+                    completedLatches.set(0);
+                    logger.info("CountDownLatch warmup complete for {}, beginning measurement", implType);
+                }
                 String latchName = "latch-" + completedLatches.get();
                 long startTime = System.nanoTime();
 
@@ -98,8 +111,30 @@ public class CountDownLatchBenchmarkScenario {
         }
 
         result.complete();
+        result.setLatencyPercentiles(calculatePercentiles(latencies));
         logger.info("=== CountDownLatch benchmark for {} completed: {} latches ===", implType, completedLatches.get());
         return result;
+    }
+
+    private Map<String, Long> calculatePercentiles(List<Long> values) {
+        Map<String, Long> percentiles = new HashMap<>();
+        if (values.isEmpty()) return percentiles;
+
+        Collections.sort(values);
+        int size = values.size();
+
+        percentiles.put("p50", values.get((int) (size * 0.50)));
+        percentiles.put("p75", values.get((int) (size * 0.75)));
+        percentiles.put("p90", values.get(Math.min((int) (size * 0.90), size - 1)));
+        percentiles.put("p95", values.get(Math.min((int) (size * 0.95), size - 1)));
+        percentiles.put("p99", values.get(Math.min((int) (size * 0.99), size - 1)));
+        percentiles.put("max", values.get(size - 1));
+
+        long sum = 0;
+        for (Long v : values) sum += v;
+        percentiles.put("mean", sum / size);
+
+        return percentiles;
     }
 }
 

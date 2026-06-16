@@ -25,12 +25,23 @@ public abstract class AbstractSemaphoreClient implements SemaphoreBenchmarkClien
         BenchmarkResult result = new BenchmarkResult(clientId, getImplementationType());
         List<Long> waitTimes = new ArrayList<>();
 
-        long endTime = System.currentTimeMillis() + config.getBenchmarkDuration().toMillis();
+        long now = System.currentTimeMillis();
+        long warmupEnd = now + config.getWarmupDuration().toMillis();
+        long endTime = warmupEnd + config.getBenchmarkDuration().toMillis();
         long workTimeNanos = config.getWorkSimulationTime().toNanos();
+        boolean inWarmup = config.getWarmupDuration().toMillis() > 0;
 
-        logger.info("Client {} ({}) starting semaphore benchmark", clientId, getImplementationType());
+        logger.info("Client {} ({}) starting semaphore benchmark (warmup {}s + measure {}s)",
+                clientId, getImplementationType(),
+                config.getWarmupDuration().getSeconds(), config.getBenchmarkDuration().getSeconds());
 
         while (System.currentTimeMillis() < endTime && !Thread.currentThread().isInterrupted()) {
+            if (inWarmup && System.currentTimeMillis() >= warmupEnd) {
+                inWarmup = false;
+                waitTimes.clear();
+                result.reset();
+                logger.info("Client {} warmup complete, beginning measurement", clientId);
+            }
             long waitStartNanos = System.nanoTime();
             boolean acquired = false;
 

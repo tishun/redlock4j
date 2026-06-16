@@ -40,6 +40,7 @@ public class Redlock4jSingleNodeFairLockClient extends AbstractFairLockClient {
                 .lockAcquisitionTimeout(config.getLockAcquisitionTimeout())
                 .retryDelay(Duration.ofMillis(50))
                 .maxRetryAttempts(1000)
+                .usePolling() // FairLock recommended; avoids keyspace-notification overhead
                 .build();
 
         try {
