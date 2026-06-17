@@ -1,6 +1,6 @@
 # Fair Lock Benchmark Results
 
-**Generated:** 2026-06-16 09:01:07
+**Generated:** 2026-06-16 12:54:43
 
 ## Configuration
 
@@ -16,26 +16,26 @@
 
 | Metric | redisson | redlock4j-singlenode | redlock4j-lettuce | redlock4j-jedis | 
 |--------|--------|--------|--------|--------|
-| Total Ops/s | 16.95 | 11.92 | 11.68 | 11.98 | 
-| Avg Ops/s/Client (95% CI) | 3.39 ± 0.47 | 2.38 ± 0.00 | 2.34 ± 0.00 | 2.40 ± 0.00 | 
-| Successful Ops | 1,088 | 716 | 701 | 719 | 
+| Total Ops/s | 16.99 | 12.42 | 2.87 | 2.95 | 
+| Avg Ops/s/Client (95% CI) | 3.40 ± 0.47 | 2.48 ± 0.00 | 0.57 ± 0.00 | 0.59 ± 0.00 | 
+| Successful Ops | 1,092 | 745 | 172 | 177 | 
 | Failed Ops | 0 | 0 | 0 | 0 | 
 | Success Rate | 100.00% | 100.00% | 100.00% | 100.00% | 
-| Avg Wait Time | 248.53 ms | 365.02 ms | 373.32 ms | 362.73 ms | 
+| Avg Wait Time | 247.92 ms | 348.64 ms | 1685.38 ms | 1641.70 ms | 
 | Correctness | PASS | PASS | PASS | PASS | 
 
 ## Latency Percentiles (microseconds)
 
 | Percentile | redisson | redlock4j-singlenode | redlock4j-lettuce | redlock4j-jedis | 
 |------------|--------|--------|--------|--------|
-| p50 | 221,531 | 376,841 | 361,576 | 354,855 | 
-| p75 | 222,592 | 386,740 | 407,230 | 398,471 | 
-| p90 | 223,792 | 436,671 | 416,142 | 411,908 | 
-| p95 | 224,794 | 439,692 | 439,925 | 418,482 | 
-| p99 | 229,468 | 471,050 | 476,082 | 445,089 | 
-| p999 | 6,187,845 | 492,703 | 482,587 | 455,135 | 
-| max | 6,187,845 | 492,703 | 482,587 | 455,135 | 
-| mean | 248,525 | 365,020 | 373,319 | 362,725 | 
+| p50 | 220,970 | 332,021 | 1,667,216 | 1,666,043 | 
+| p75 | 222,141 | 380,775 | 2,009,072 | 1,962,217 | 
+| p90 | 223,572 | 386,150 | 2,284,444 | 2,113,376 | 
+| p95 | 224,687 | 388,930 | 2,369,874 | 2,363,625 | 
+| p99 | 229,750 | 434,824 | 2,549,375 | 2,457,072 | 
+| p999 | 6,194,120 | 436,999 | 2,549,375 | 2,457,072 | 
+| max | 6,194,120 | 436,999 | 2,549,375 | 2,457,072 | 
+| mean | 247,923 | 348,636 | 1,685,377 | 1,641,698 | 
 
 ## Correctness Validation
 
@@ -44,32 +44,32 @@
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1633
+- **Lock Events Analyzed:** 1638
 
 ### redlock4j-singlenode
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1080
+- **Lock Events Analyzed:** 1119
 
 ### redlock4j-lettuce
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1054
+- **Lock Events Analyzed:** 274
 
 ### redlock4j-jedis
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1079
+- **Lock Events Analyzed:** 269
 
 ## Analysis
 
-**Highest Throughput:** redisson with 16.95 ops/s
+**Highest Throughput:** redisson with 16.99 ops/s
 
-**Lowest Latency:** redisson with 248.53 ms average wait time
+**Lowest Latency:** redisson with 247.92 ms average wait time
 

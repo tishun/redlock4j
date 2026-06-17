@@ -38,26 +38,44 @@ public class PollingWaitStrategy implements LockWaitStrategy {
     private static final Logger logger = LoggerFactory.getLogger(PollingWaitStrategy.class);
 
     private Duration retryDelay;
+    private Duration maxRetryDelay;
+    private double retryDelayMultiplier;
+    private double retryDelayJitterRatio;
     private volatile boolean closed = false;
 
     @Override
     public void initialize(List<RedisDriver> drivers, Duration retryDelay) {
+        initialize(drivers, retryDelay, retryDelay, 1.0, 0.0);
+    }
+
+    @Override
+    public void initialize(List<RedisDriver> drivers, Duration retryDelay, Duration maxRetryDelay,
+            double retryDelayMultiplier, double retryDelayJitterRatio) {
         this.retryDelay = retryDelay;
-        logger.info("Polling wait strategy initialized with retry delay {}", retryDelay);
+        this.maxRetryDelay = maxRetryDelay != null ? maxRetryDelay : retryDelay;
+        this.retryDelayMultiplier = retryDelayMultiplier;
+        this.retryDelayJitterRatio = retryDelayJitterRatio;
+        logger.info("Polling wait strategy initialized with retry delay {}, max {} , multiplier {}, jitter ratio {}",
+                retryDelay, this.maxRetryDelay, retryDelayMultiplier, retryDelayJitterRatio);
     }
 
     @Override
     public boolean waitForRelease(String lockKey, Duration timeout) throws InterruptedException {
+        return waitForRelease(lockKey, timeout, 0);
+    }
+
+    @Override
+    public boolean waitForRelease(String lockKey, Duration timeout, int attempt) throws InterruptedException {
         if (closed) {
             throw new IllegalStateException("Strategy has been closed");
         }
 
         Instant deadline = Instant.now().plus(timeout);
 
-        while (Instant.now().isBefore(deadline)) {
-            // Sleep for the retry delay
+        if (Instant.now().isBefore(deadline)) {
             Duration remaining = Duration.between(Instant.now(), deadline);
-            Duration sleepDuration = remaining.compareTo(retryDelay) < 0 ? remaining : retryDelay;
+            Duration backoff = computeBackoff(attempt);
+            Duration sleepDuration = remaining.compareTo(backoff) < 0 ? remaining : backoff;
 
             if (!sleepDuration.isNegative() && !sleepDuration.isZero()) {
                 Thread.sleep(sleepDuration.toMillis());
@@ -69,6 +87,14 @@ public class PollingWaitStrategy implements LockWaitStrategy {
         }
 
         return false;
+    }
+
+    /**
+     * Computes the backoff delay for the given attempt index, capped at {@link #maxRetryDelay} and jittered.
+     */
+    private Duration computeBackoff(int attempt) {
+        return BackoffCalculator.compute(retryDelay, maxRetryDelay, retryDelayMultiplier, retryDelayJitterRatio,
+                attempt);
     }
 
     @Override

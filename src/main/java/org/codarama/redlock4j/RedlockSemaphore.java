@@ -215,7 +215,7 @@ public class RedlockSemaphore extends AbstractRedlock {
 
             // Wait before retrying
             if (attempt < config.getMaxRetryAttempts()) {
-                waitForLockRelease(semaphoreKey, remaining.toMillis());
+                waitForLockRelease(semaphoreKey, remaining.toMillis(), attempt);
             }
         }
 

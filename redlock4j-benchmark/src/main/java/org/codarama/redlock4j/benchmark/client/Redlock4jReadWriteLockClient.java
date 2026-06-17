@@ -36,6 +36,9 @@ public class Redlock4jReadWriteLockClient extends AbstractReadWriteLockClient {
                 .defaultLockTimeout(config.getLockTimeout())
                 .lockAcquisitionTimeout(config.getLockAcquisitionTimeout())
                 .retryDelay(Duration.ofMillis(50))
+                .maxRetryDelay(Duration.ofMillis(500))
+                .retryDelayMultiplier(2.0)
+                .retryDelayJitterRatio(0.5)
                 .maxRetryAttempts(1000);
 
         for (RedisClusterManager.RedisNodeInfo node : nodes) {

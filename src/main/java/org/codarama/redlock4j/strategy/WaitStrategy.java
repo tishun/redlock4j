@@ -59,7 +59,9 @@ public enum WaitStrategy {
      *
      * <p>
      * The polling interval is configured via {@code retryDelay} in
-     * {@link org.codarama.redlock4j.configuration.RedlockConfiguration}.
+     * {@link org.codarama.redlock4j.configuration.RedlockConfiguration}. Exponential backoff is also supported via
+     * {@code maxRetryDelay}, {@code retryDelayMultiplier} and {@code retryDelayJitterRatio} \u2014 these default to
+     * passive values that preserve a fixed-interval poll.
      * </p>
      */
     POLLING

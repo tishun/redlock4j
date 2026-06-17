@@ -99,6 +99,38 @@ public class RedlockConfigurationTest {
     }
 
     @Test
+    public void testBackoffDefaultsArePassive() {
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379).build();
+        assertEquals(config.getRetryDelay(), config.getMaxRetryDelay());
+        assertEquals(1.0, config.getRetryDelayMultiplier(), 0.0);
+        assertEquals(0.0, config.getRetryDelayJitterRatio(), 0.0);
+    }
+
+    @Test
+    public void testBackoffBuilderAndGetters() {
+        RedlockConfiguration config = RedlockConfiguration.builder().addRedisNode("localhost", 6379)
+                .retryDelay(Duration.ofMillis(50)).maxRetryDelay(Duration.ofMillis(500)).retryDelayMultiplier(2.0)
+                .retryDelayJitterRatio(0.25).build();
+        assertEquals(Duration.ofMillis(50), config.getRetryDelay());
+        assertEquals(Duration.ofMillis(500), config.getMaxRetryDelay());
+        assertEquals(2.0, config.getRetryDelayMultiplier(), 0.0);
+        assertEquals(0.25, config.getRetryDelayJitterRatio(), 0.0);
+    }
+
+    @Test
+    public void testBackoffValidation() {
+        assertThrows(IllegalArgumentException.class,
+                () -> RedlockConfiguration.builder().addRedisNode("localhost", 6379).retryDelay(Duration.ofMillis(200))
+                        .maxRetryDelay(Duration.ofMillis(100)).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> RedlockConfiguration.builder().addRedisNode("localhost", 6379).retryDelayMultiplier(0.5).build());
+        assertThrows(IllegalArgumentException.class, () -> RedlockConfiguration.builder()
+                .addRedisNode("localhost", 6379).retryDelayJitterRatio(1.5).build());
+        assertThrows(IllegalArgumentException.class, () -> RedlockConfiguration.builder()
+                .addRedisNode("localhost", 6379).retryDelayJitterRatio(-0.1).build());
+    }
+
+    @Test
     public void testQuorumCalculation() {
         // Test with 3 nodes
         RedlockConfiguration config3 = RedlockConfiguration.builder().addRedisNode("localhost", 6379)

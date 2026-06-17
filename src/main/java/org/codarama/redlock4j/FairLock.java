@@ -148,7 +148,7 @@ public class FairLock extends AbstractRedlock implements Lock {
                 // Wait before retrying
                 remaining = Duration.between(Instant.now(), deadline);
                 if (!remaining.isNegative()) {
-                    waitForLockRelease(lockKey, remaining.toMillis());
+                    waitForLockRelease(lockKey, remaining.toMillis(), attempt);
                 }
                 attempt++;
             }

@@ -51,6 +51,30 @@ public interface LockWaitStrategy extends AutoCloseable {
     void initialize(List<RedisDriver> drivers, Duration retryDelay);
 
     /**
+     * Initializes the wait strategy with backoff parameters in addition to the base retry delay.
+     *
+     * <p>
+     * Default implementation delegates to {@link #initialize(List, Duration)} for backward compatibility; strategies
+     * that honor exponential backoff (e.g. {@link PollingWaitStrategy}) should override this overload.
+     * </p>
+     *
+     * @param drivers
+     *            the Redis drivers to use
+     * @param retryDelay
+     *            the base retry delay
+     * @param maxRetryDelay
+     *            the upper bound on the retry delay after backoff growth
+     * @param retryDelayMultiplier
+     *            multiplier applied per attempt (1.0 disables growth)
+     * @param retryDelayJitterRatio
+     *            jitter ratio in [0.0, 1.0] (0.0 disables jitter)
+     */
+    default void initialize(List<RedisDriver> drivers, Duration retryDelay, Duration maxRetryDelay,
+            double retryDelayMultiplier, double retryDelayJitterRatio) {
+        initialize(drivers, retryDelay);
+    }
+
+    /**
      * Waits for a lock to be released on the specified key.
      *
      * <p>
@@ -76,6 +100,29 @@ public interface LockWaitStrategy extends AutoCloseable {
      *             if the current thread is interrupted while waiting
      */
     boolean waitForRelease(String lockKey, Duration timeout) throws InterruptedException;
+
+    /**
+     * Attempt-aware overload of {@link #waitForRelease(String, Duration)}.
+     *
+     * <p>
+     * The {@code attempt} parameter (0-based) lets strategies grow the wait between successive retries (exponential
+     * backoff). Default implementation ignores {@code attempt} and delegates to
+     * {@link #waitForRelease(String, Duration)} for backward compatibility.
+     * </p>
+     *
+     * @param lockKey
+     *            the key of the lock to wait for
+     * @param timeout
+     *            maximum time to wait
+     * @param attempt
+     *            0-based attempt counter
+     * @return true if a release event was detected, false if timeout was reached
+     * @throws InterruptedException
+     *             if the current thread is interrupted while waiting
+     */
+    default boolean waitForRelease(String lockKey, Duration timeout, int attempt) throws InterruptedException {
+        return waitForRelease(lockKey, timeout);
+    }
 
     /**
      * Returns the type of wait strategy.

@@ -259,18 +259,24 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
                 // Wait before retrying
                 if (attempt < config.getMaxRetryAttempts()) {
-                    waitForLockRelease(remaining.toMillis());
+                    waitForLockRelease(remaining.toMillis(), attempt);
                 }
             }
 
             return false;
         }
 
-        private void waitForLockRelease(long remainingTimeoutMs) throws InterruptedException {
+        private void waitForLockRelease(long remainingTimeoutMs, int attempt) throws InterruptedException {
             if (waitStrategy != null) {
-                waitStrategy.waitForRelease(writeLockKey, Duration.ofMillis(Math.max(remainingTimeoutMs, 1)));
+                waitStrategy.waitForRelease(writeLockKey, Duration.ofMillis(Math.max(remainingTimeoutMs, 1)), attempt);
             } else {
-                Thread.sleep(config.getRetryDelay().toMillis());
+                Duration delay = org.codarama.redlock4j.strategy.BackoffCalculator.compute(config.getRetryDelay(),
+                        config.getMaxRetryDelay(), config.getRetryDelayMultiplier(), config.getRetryDelayJitterRatio(),
+                        attempt);
+                long sleepMs = Math.min(delay.toMillis(), Math.max(remainingTimeoutMs, 1));
+                if (sleepMs > 0) {
+                    Thread.sleep(sleepMs);
+                }
             }
         }
 

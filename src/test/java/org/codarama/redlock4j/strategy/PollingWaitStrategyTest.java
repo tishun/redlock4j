@@ -112,6 +112,36 @@ class PollingWaitStrategyTest {
     }
 
     @Test
+    void waitForRelease_withBackoffShouldGrowAndRespectCap() throws InterruptedException {
+        PollingWaitStrategy strategy = new PollingWaitStrategy();
+        strategy.initialize(Collections.emptyList(), Duration.ofMillis(20), Duration.ofMillis(100), 2.0, 0.0);
+
+        // attempt 0 -> 20ms
+        long t0 = System.currentTimeMillis();
+        strategy.waitForRelease("k", Duration.ofMillis(500), 0);
+        long e0 = System.currentTimeMillis() - t0;
+        assertTrue(e0 >= 15 && e0 <= 60, "attempt=0 elapsed=" + e0);
+
+        // attempt 3 -> 20*2^3 = 160 -> capped at 100ms
+        long t3 = System.currentTimeMillis();
+        strategy.waitForRelease("k", Duration.ofMillis(500), 3);
+        long e3 = System.currentTimeMillis() - t3;
+        assertTrue(e3 >= 90 && e3 <= 150, "attempt=3 elapsed=" + e3);
+    }
+
+    @Test
+    void waitForRelease_defaultsPreserveLegacyBehavior() throws InterruptedException {
+        // initialize via the legacy single-arg overload -> multiplier=1.0, jitter=0.0
+        PollingWaitStrategy strategy = new PollingWaitStrategy();
+        strategy.initialize(Collections.emptyList(), Duration.ofMillis(50));
+
+        long start = System.currentTimeMillis();
+        strategy.waitForRelease("k", Duration.ofMillis(500), 4); // attempt should not grow delay
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed >= 40 && elapsed <= 90, "elapsed=" + elapsed);
+    }
+
+    @Test
     void waitForRelease_shouldHandleInterruption() throws InterruptedException {
         PollingWaitStrategy strategy = new PollingWaitStrategy();
         strategy.initialize(Collections.emptyList(), Duration.ofSeconds(1)); // Long delay

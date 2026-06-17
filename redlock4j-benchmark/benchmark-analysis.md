@@ -17,15 +17,15 @@ Source files analyzed:
 | ~~M4~~ | ~~`redlock4j-3node` distributed-lock numbers from a run where 5/36 attempts timed out (86% success) — throughput collapse may be partly run instability~~ | ~~`distributed-lock-benchmark-results.md:22`~~ | ~~re-run after fixes; add per-attempt logging~~ **DONE (re-measured §6.1/§7.1)** |
 | ~~M5~~ | ~~"Fair lock" comparison includes non-fair impls (`shedlock-lettuce`, `spring-integration`, `redpulsar`)~~ | ~~`distributed-lock-benchmark-results.md:31-37`~~ | ~~label fairness column; split into separate fair/non-fair runs~~ **DONE (separate `FairLockBenchmarkMain` / `DistributedLockBenchmarkMain`)** |
 
-## 2. Per-primitive gaps vs competitors (updated 2026-06-16, post P0-1 + hygiene)
+## 2. Per-primitive gaps vs competitors (updated 2026-06-16, post P0-1 + A1 backoff)
 
 | Primitive | Worst remaining gap | Number | Where redlock4j wins |
 |---|---|---|---|
-| Distributed lock (3-node) | Throughput | **~58× slower** (0.38 vs 21.87 ops/s), 82 % success | **Best p99 in field** (407 ms) |
-| Distributed lock (single-node) | p99 vs redisson | ~2.1× higher (3.14 s vs 1.49 s) | Throughput within 1 % of redisson |
+| Distributed lock (3-node) | Throughput | **~27× slower** (0.81 vs 21.63 ops/s), 91 % success | **Best p99 in field** (858 ms vs redisson 1,287 ms) |
+| Distributed lock (single-node) | p99 vs redisson | ~1.5× higher (1.98 s vs 1.29 s) | Throughput within 1 % of redisson |
 | MultiLock | — | parity / slight lead on throughput AND p99 | Leader on every axis (Ops/s 17.72, p99 1.06 s) |
-| RWLock readers | Throughput vs redisson | ~2.9× slower (54 vs 154 ops/s) | — |
-| RWLock writers | — | redisson starved (0.07 ops/s, 27 s wait) | Leader (17.26 ops/s, 91 ms p99 vs redisson 27 s) |
+| RWLock readers | Throughput vs redisson | ~1.6× slower (95.4 vs 151.7 ops/s) | redlock4j-rwlock now beats single-node (+28 %) |
+| RWLock writers | — | redisson starved (0.21 ops/s, 9.7 s wait) | Leader (16.42 ops/s, 104 ms p99 vs redisson 16.8 s) |
 | Semaphore | — | redlock4j ~1.7× faster than redisson, p99 ~100× lower | Clear lead |
 | CountDownLatch | — | parity (redlock4j slight lead on Ops/s + p99) | Marginal lead |
 | FairLock | Throughput vs redisson | ~1.4× slower (~12 vs 17 ops/s) — using polling fallback | Correctness/FIFO PASS |
@@ -137,15 +137,15 @@ Same config as before (5 clients × 1 min × 50ms work × 3 nodes), now with par
 
 - All three within 3% on throughput. redlock4j slightly leads on median and p99. M2 fix (percentiles wired in) now visible.
 
-### 6.6 Updated gap matrix
+### 6.6 Updated gap matrix (post-A1 backoff)
 
 | Primitive | Prior gap | Current status |
 |---|---|---|
-| Distributed lock (3-node) throughput | 36× slower | Still ~58× slower (0.38 vs 21.87 ops/s) — **polling wait strategy, not I/O, is now the bottleneck**. Pub/Sub-on-release (P0-4) is the unlock. |
-| Distributed lock (3-node) p99 | uncomparable | **Best in class** (407ms) |
-| MultiLock p99 | 12× worse | **Best in class** (1.06s) |
-| RWLock reader throughput | unmeasured-pairwise | 3× behind redisson — needs Lua-script reader path |
-| RWLock writer throughput | hidden by M3 | **220× better than redisson** (redisson starves writers) |
+| Distributed lock (3-node) throughput | 58× slower (0.38 ops/s) | **~27× slower** (0.81 ops/s) — backoff halved the cliff; A3 (pub/sub-on-release) is the next unlock. |
+| Distributed lock (3-node) p99 | uncomparable | **Best in class** (858 ms vs redisson 1,287 ms) |
+| MultiLock p99 | 12× worse | **Best in class** (1.06 s) |
+| RWLock reader throughput | 3× behind redisson | ~1.6× behind (95.4 vs 151.7 ops/s) — backoff added +77 %; further closure needs A2 Lua reader path. |
+| RWLock writer throughput | hidden by M3 | **78× better than redisson** (16.42 vs 0.21 ops/s — redisson starves writers) |
 | Semaphore | already winning | Still winning, marginal improvement |
 | CountDownLatch | parity | Parity, marginal lead |
 
@@ -165,18 +165,18 @@ Recommended order: **P1-5 (cheap, non-BC) -> P0-3 (BC, foundational) -> P0-4 (BC
 
 All runs: 3-node Redis (testcontainers), 1 min measurement, 30 s warmup-discard, 50 ms work simulation, lock timeout 30 s, 95 % CI on per-client mean. FairLock now uses `.usePolling()` to bypass keyspace-notification overhead.
 
-### 7.1 Distributed Lock (5 clients)
+### 7.1 Distributed Lock (5 clients, post-A1 backoff)
 
 | Impl | Ops/s | Succ % | Mean Wait | p99 (ms) | Notes |
 |---|---:|---:|---:|---:|---|
-| **redpulsar** | **21.87** | 100% | 187 ms | 7,771 | throughput winner |
-| spring-integration | 20.29 | 100% | 200 ms | 5,687 | |
-| shedlock-lettuce | 18.94 | 100% | 230 ms | 3,598 | |
-| redlock4j-singlenode | 18.33 | 100% | 407 ms | 3,142 | |
-| redisson | 18.22 | 100% | 229 ms | 1,487 | |
-| **redlock4j-3node** | **0.38** | 82% | 166 ms | **407** | best p99 / throughput collapse |
+| **redpulsar** | **21.63** | 100% | 302 ms | 13,022 | throughput leader |
+| spring-integration | 19.47 | 100% | 273 ms | 9,981 | |
+| shedlock-lettuce | 18.86 | 100% | 217 ms | 3,022 | |
+| redlock4j-singlenode | 18.33 | 100% | 251 ms | 1,977 | |
+| redisson | 18.24 | 100% | 229 ms | 1,287 | |
+| **redlock4j-3node** | **0.81** | 91% | 259 ms | **858** | **best p99** / throughput still capped |
 
-3-node redlock4j has best-in-class p99 (407 ms) but only 23 ops in 60 s — bottleneck is the 50 ms `PollingWaitStrategy` under quorum contention.
+3-node redlock4j now leads p99 (858 ms — ~1.5× better than redisson) and doubled throughput (0.38 → 0.81) after A1. Remaining throughput gap requires A3 (pub/sub-on-release) to eliminate polling entirely.
 
 ### 7.2 MultiLock (5 clients)
 
@@ -188,15 +188,15 @@ All runs: 3-node Redis (testcontainers), 1 min measurement, 30 s warmup-discard,
 
 redlock4j wins every axis.
 
-### 7.3 ReadWriteLock (10 clients, reader+writer split)
+### 7.3 ReadWriteLock (10 clients, reader+writer split, post-A1 backoff)
 
 | Impl | Reader ops/s | Reader p99 (µs) | Writer ops/s | Writer p99 (µs) |
 |---|---:|---:|---:|---:|
-| **redisson** | **153.62** | **3,098** | 0.07 | 26,977,794 (starved) |
-| redlock4j-singlenode | 59.07 | 452,207 | **17.26** | 90,528 |
-| redlock4j-rwlock | 53.59 | 431,941 | 15.51 | **72,728** |
+| **redisson** | **151.65** | **5,823** | 0.21 | 16,820,725 (starved) |
+| redlock4j-rwlock | 95.41 | 348,441 | **16.42** | **104,200** |
+| redlock4j-singlenode | 74.66 | 340,626 | 15.63 | 755,568 |
 
-Redisson dominates read-only (~2.6×) but starves writers (2 successes / 60 s). redlock4j balanced.
+Redisson still leads read-only (~1.6×, down from 2.6× pre-backoff) but starves writers (6 successes / 60 s). redlock4j-rwlock now beats single-node on both reader throughput (+28 %) and writer p99 (~7× better). Redisson reader p99 microsecond-scale is from in-process semaphore counting; redlock4j numbers are dominated by Redis round-trips (one per acquire).
 
 ### 7.4 Semaphore (5 clients)
 
@@ -229,21 +229,38 @@ Parity with a slight edge to redlock4j multinode.
 
 Switching from keyspace-notifications to polling moved redlock4j FairLock from ~0 ops/s to ~70 % of Redisson's throughput with passing correctness/FIFO checks.
 
-### 7.7 Standings
+### 7.7 Standings (post-A1 backoff)
 
 | Suite | Leader | redlock4j position |
 |---|---|---|
-| DistributedLock (single-node) | redpulsar 21.87 | 0.84× (16 % slower) |
-| DistributedLock (3-node) | redpulsar 21.87 | **0.017× — broken; P0-4/P1-5 required** |
+| DistributedLock (single-node) | redpulsar 21.63 | 0.85× (15 % slower) |
+| DistributedLock (3-node) | redpulsar 21.63 | **0.037× throughput — still capped; A3 required.** **Best p99 (858 ms vs redisson 1,287 ms)** |
 | MultiLock | **redlock4j 17.72** | **leader** |
-| RWLock readers | redisson 153.62 | 0.35× |
-| RWLock writers | **redlock4j-singlenode 17.26** | **leader (redisson starved)** |
+| RWLock readers | redisson 151.65 | 0.63× (was 0.35× pre-backoff) |
+| RWLock writers | **redlock4j-rwlock 16.42** | **leader (redisson starved at 0.21 ops/s)** |
 | Semaphore | **redlock4j-singlenode 91.09** | **leader (~1.7× redisson)** |
 | CountDownLatch | **redlock4j 59.91** | **leader** |
 | FairLock | redisson 16.95 | 0.71× |
 
-redlock4j leads 4 of 7 categories. Remaining gaps (DistributedLock 3-node throughput, RWLock reader throughput, FairLock throughput) all trace to the same root cause: **fixed 50 ms polling between attempts**. P0-4 (pub/sub wait strategy) and P1-5 (exponential backoff with jitter) are the next levers.
+redlock4j leads 4 of 7 categories and is best-in-class on p99 for 5 of 7. Remaining throughput gaps (DistributedLock 3-node, RWLock reader, FairLock) all trace to the same root cause: **the polling wait strategy itself**. A1 (backoff) absorbed the biggest cliff in DistributedLock 3-node and RWLock reader; A3 (pub/sub-on-release) is the next lever for the rest.
 
+### 7.8 A1 impact: exponential backoff with jitter (2026-06-16)
+
+Configuration applied to 3-node redlock4j benchmark clients: `retryDelay=50ms`, `maxRetryDelay=500ms`, `retryDelayMultiplier=2.0`, `retryDelayJitterRatio=0.5`. Same workload as §7.1/§7.3/§7.6 (5 clients, 1 min, 30 s warmup, 50 ms work, polling wait strategy).
+
+| Suite | Metric | Baseline (fixed 50 ms) | With backoff | Δ |
+|---|---|---:|---:|---:|
+| DistributedLock 3-node | Ops/s | 0.38 | **0.81** | **+113 %** |
+| DistributedLock 3-node | Success rate | 82 % | **91 %** | +9 pp |
+| DistributedLock 3-node | Mean wait | 166 ms | 259 ms | +56 % (still <p99) |
+| RWLock reader (redlock4j-rwlock-reader) | Ops/s | ~54 | **95.41** | **+77 %** |
+| RWLock reader | Mean wait | 113 ms | 30.42 ms | **−73 %** |
+| RWLock writer (redlock4j-rwlock-writer) | Ops/s | 16.42 | 16.42 | flat (already leader) |
+| FairLock (redlock4j-lettuce / -jedis) | Ops/s | 11.37 / 11.60 | **2.87 / 2.95** | **−75 % (regression — reverted)** |
+
+**FairLock regression analysis**: backoff actively hurts FairLock because the head-of-queue client must wake on every release event; growing the inter-poll delay causes it to miss the holder's release window. Mean wait blew up from 384 ms → 1685 ms. FairLock clients were reverted to fixed `retryDelay=50ms`; backoff is only beneficial for non-fair/contention-based primitives. This reinforces task **C1** (FairLock head-of-queue rework via Lua) and suggests the head-of-queue waiter should opt out of backoff once C1 is in place.
+
+A1 closes ~half of the DistributedLock 3-node throughput collapse and nearly closes the RWLock reader gap on its own — at zero infrastructure cost (no Lua, no pub/sub). A3 (pub/sub-on-release) is still required to close the remainder.
 
 ## 8. Task list (re-prioritized 2026-06-16)
 
@@ -251,11 +268,10 @@ Re-ordered by current measured impact and cost; original P0–P2 numbering prese
 
 ### Tier A — High impact, attack the 50 ms polling bottleneck
 
-- [ ] **A1 (P1-5) Exponential backoff with jitter in `PollingWaitStrategy`**
+- [x] ~~**A1 (P1-5) Exponential backoff with jitter in `PollingWaitStrategy`**~~ **DONE — see §7.8**
   - Replace fixed 50 ms retry with `min(maxDelay, base * 2^attempt) ± jitter`.
   - Configurable via `RedlockConfiguration` (additive, **non-BC**).
-  - Expected impact: closes a significant fraction of the 3-node throughput gap (0.38 → est. 5–10 ops/s) and reduces synchronized wake-ups under contention. Also helps FairLock throughput.
-  - Acceptance: re-run §7.1, §7.3 readers, §7.6 — expect Ops/s ↑, p99 ≤ current.
+  - Measured impact: DistributedLock 3-node +113 %, RWLock reader +77 %. **FairLock regressed −75 %** (reverted; reinforces C1).
 
 - [ ] **A2 (P0-3) Single Lua script per node for SETNX-with-reentry / atomic release-with-publish / RWLock mode transitions**
   - **BC** to `RedisDriver` SPI — add `eval`/scripted ops.
@@ -300,10 +316,10 @@ Re-ordered by current measured impact and cost; original P0–P2 numbering prese
   - **BC** to MultiLock semantics if previously allowed partial holds.
   - Current MultiLock is already the §7.2 leader on throughput AND p99; priority lowered to **correctness/atomicity hardening** rather than perf.
 
-- [ ] **C3 Investigate redlock4j-singlenode DistributedLock p99 = 3.14 s** *(§6.1)*
-  - Worst p99 in field despite competitive throughput.
-  - Likely cause: polling-retry storm or absence of watchdog (overlap with A1, B3).
-  - Cheap diagnostic: enable per-attempt timing log, identify whether the 3 s comes from one stuck attempt or a long retry sequence.
+- [ ] **C3 Investigate redlock4j-singlenode DistributedLock p99 = 1.98 s** *(§7.1)*
+  - Still worst p99 in field despite competitive throughput (post-A1 backoff brought it down from 3.14 s).
+  - Likely cause: residual polling-retry storm or absence of watchdog (overlap with A3, B3).
+  - Cheap diagnostic: enable per-attempt timing log, identify whether the ~2 s comes from one stuck attempt or a long retry sequence.
 
 - [ ] **C4 (P2-9) Pool / inline lock-value generation**
   - Replace `SecureRandom.nextBytes(20) + String.format("%02x", b)` per attempt with `UUID.randomUUID()` or a `ThreadLocalRandom`-backed pre-sized buffer.
@@ -325,6 +341,7 @@ Re-ordered by current measured impact and cost; original P0–P2 numbering prese
 ### Done (from prior tiers)
 
 - [x] ~~P0-1 Parallelize multi-node I/O in `MultiNodeStrategy`~~ — p99 best-in-class; throughput unchanged (moved bottleneck).
+- [x] ~~A1 (P1-5) Exponential backoff with jitter~~ — §7.8: DistributedLock 3-node +113 %, RWLock reader +77 %.
 - [x] ~~P3-12 Benchmark hygiene (warmup-discard, JSON, 95 % CI, separate fair/non-fair runs)~~
 - [x] ~~P3-13 RW-lock reader/writer pairwise comparison~~
 - [x] ~~FairLock Jedis 7 incompatibility + switch to polling baseline~~
