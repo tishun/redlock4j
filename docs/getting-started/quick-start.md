@@ -4,48 +4,86 @@ This guide will help you get started with Redlock4j in just a few minutes.
 
 ## Basic Setup
 
-### 1. Create Redis Connection Pools
+### 1. Configure the Redis Nodes
 
-First, create connection pools for your Redis instances. For production use, you should have at least 3 independent Redis instances.
+Redlock4j does not take pre-built connection pools or clients. Instead, you
+declare each Redis node as a host/port pair in a `RedlockConfiguration`. For a
+full Redlock deployment you should use at least 3 independent Redis instances.
 
 ```java
-import redis.clients.jedis.JedisPool;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-// Create pools for multiple Redis instances
-JedisPool pool1 = new JedisPool("redis1.example.com", 6379);
-JedisPool pool2 = new JedisPool("redis2.example.com", 6379);
-JedisPool pool3 = new JedisPool("redis3.example.com", 6379);
+import java.time.Duration;
+
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1.example.com", 6379)
+    .addRedisNode("redis2.example.com", 6379)
+    .addRedisNode("redis3.example.com", 6379)
+    .defaultLockTimeout(Duration.ofSeconds(30))
+    .retryDelay(Duration.ofMillis(200))
+    .maxRetryAttempts(3)
+    .build();
 ```
 
-### 2. Create a Redlock Instance
+!!! info "Number of nodes"
+    A single node runs in single-node mode, and 3 or more nodes run in quorum
+    mode. Configuring exactly 2 nodes throws an `IllegalArgumentException` at
+    `build()`, since a quorum cannot be formed.
+
+### 2. Create a RedlockManager
+
+The `RedlockManager` owns the connections to the configured nodes. It is
+`AutoCloseable`, so create it inside a try-with-resources block and let it
+manage the underlying pools for you. Use `withJedis(config)` for the Jedis
+driver, or `withLettuce(config)` for Lettuce.
 
 ```java
-import org.codarama.redlock4j.Redlock;
+import org.codarama.redlock4j.RedlockManager;
 
-Redlock redlock = new Redlock(pool1, pool2, pool3);
+try (RedlockManager manager = RedlockManager.withJedis(config)) {
+    // create and use locks here
+}
 ```
 
 ### 3. Acquire and Release Locks
 
+`createLock(name)` returns a standard `java.util.concurrent.locks.Lock`. The
+lock TTL and retry behaviour come from the configuration, so `lock()` and
+`unlock()` take no arguments.
+
 ```java
-import org.codarama.redlock4j.Lock;
+import java.util.concurrent.locks.Lock;
 
-// Try to acquire a lock for "my-resource" with 10 second TTL
-Lock lock = redlock.lock("my-resource", 10000);
+Lock lock = manager.createLock("my-resource");
 
-if (lock != null) {
+lock.lock();
+try {
+    // Lock acquired successfully - perform your critical section here
+    System.out.println("Lock acquired! Performing critical operation...");
+    performCriticalOperation();
+} finally {
+    // Always release the lock
+    lock.unlock();
+    System.out.println("Lock released");
+}
+```
+
+If you would rather not block indefinitely, use `tryLock` with a timeout:
+
+```java
+import java.util.concurrent.locks.Lock;
+
+Lock lock = manager.createLock("my-resource");
+
+if (lock.tryLock(Duration.ofSeconds(5))) {
     try {
-        // Lock acquired successfully
-        // Perform your critical section here
         System.out.println("Lock acquired! Performing critical operation...");
         performCriticalOperation();
     } finally {
-        // Always release the lock
-        redlock.unlock(lock);
-        System.out.println("Lock released");
+        lock.unlock();
     }
 } else {
-    // Failed to acquire lock
+    // Could not acquire the lock within the timeout
     System.out.println("Could not acquire lock");
 }
 ```
@@ -55,83 +93,80 @@ if (lock != null) {
 Here's a complete working example:
 
 ```java
-import org.codarama.redlock4j.Redlock;
-import org.codarama.redlock4j.Lock;
-import redis.clients.jedis.JedisPool;
+import org.codarama.redlock4j.RedlockManager;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
+
+import java.time.Duration;
+import java.util.concurrent.locks.Lock;
 
 public class RedlockExample {
     public static void main(String[] args) {
-        // Setup Redis pools
-        JedisPool pool1 = new JedisPool("localhost", 6379);
-        JedisPool pool2 = new JedisPool("localhost", 6380);
-        JedisPool pool3 = new JedisPool("localhost", 6381);
-        
-        // Create Redlock instance
-        Redlock redlock = new Redlock(pool1, pool2, pool3);
-        
-        // Resource identifier
-        String resourceId = "shared-resource";
-        
-        // Lock TTL in milliseconds (10 seconds)
-        int ttl = 10000;
-        
-        // Try to acquire lock
-        Lock lock = redlock.lock(resourceId, ttl);
-        
-        if (lock != null) {
-            try {
-                // Critical section
-                System.out.println("Processing shared resource...");
-                Thread.sleep(2000); // Simulate work
-                System.out.println("Done processing");
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {
-                // Release lock
-                redlock.unlock(lock);
+        // Configure the Redis nodes (host/port pairs)
+        RedlockConfiguration config = RedlockConfiguration.builder()
+            .addRedisNode("localhost", 6379)
+            .addRedisNode("localhost", 6380)
+            .addRedisNode("localhost", 6381)
+            .defaultLockTimeout(Duration.ofSeconds(10))
+            .retryDelay(Duration.ofMillis(200))
+            .maxRetryAttempts(3)
+            .build();
+
+        // RedlockManager is AutoCloseable - it owns the node connections
+        try (RedlockManager manager = RedlockManager.withJedis(config)) {
+            Lock lock = manager.createLock("shared-resource");
+
+            if (lock.tryLock(Duration.ofSeconds(5))) {
+                try {
+                    // Critical section
+                    System.out.println("Processing shared resource...");
+                    Thread.sleep(2000); // Simulate work
+                    System.out.println("Done processing");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    lock.unlock();
+                }
+            } else {
+                System.out.println("Another process is using the resource");
             }
-        } else {
-            System.out.println("Another process is using the resource");
         }
-        
-        // Cleanup
-        pool1.close();
-        pool2.close();
-        pool3.close();
     }
 }
 ```
 
 ## Using Lettuce Instead of Jedis
 
-If you prefer Lettuce over Jedis:
+The configuration is identical - nodes are always host/port pairs. To use the
+Lettuce driver, create the manager with `withLettuce(config)` instead of
+`withJedis(config)`:
 
 ```java
-import io.lettuce.core.RedisClient;
-import io.lettuce.core.api.StatefulRedisConnection;
-import org.codarama.redlock4j.Redlock;
+import org.codarama.redlock4j.RedlockManager;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-// Create Lettuce clients
-RedisClient client1 = RedisClient.create("redis://localhost:6379");
-RedisClient client2 = RedisClient.create("redis://localhost:6380");
-RedisClient client3 = RedisClient.create("redis://localhost:6381");
+import java.util.concurrent.locks.Lock;
 
-// Create Redlock instance
-Redlock redlock = new Redlock(client1, client2, client3);
-
-// Use the same lock/unlock pattern as above
+try (RedlockManager manager = RedlockManager.withLettuce(config)) {
+    Lock lock = manager.createLock("my-resource");
+    // Use the same lock/unlock pattern as above
+}
 ```
 
 ## Important Notes
 
 !!! warning "Lock TTL"
-    Always set a TTL that's longer than your critical section execution time. If the lock expires while you're still processing, another client might acquire the lock.
+    The lock TTL is derived from `defaultLockTimeout` in the configuration.
+    Make sure it is longer than your critical section execution time. If the
+    lock expires while you're still processing, another client might acquire
+    the lock.
 
 !!! tip "Always Unlock"
     Always release locks in a `finally` block to ensure they're released even if an exception occurs.
 
 !!! info "Minimum Redis Instances"
-    For production use, always use at least 3 independent Redis instances to ensure proper fault tolerance.
+    For a full Redlock deployment, use at least 3 independent Redis instances
+    to ensure proper fault tolerance. A single node is supported for
+    development and standalone use.
 
 ## Next Steps
 

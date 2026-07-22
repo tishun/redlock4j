@@ -36,7 +36,8 @@ public class Redlock4jJedisFairLockClient extends AbstractFairLockClient {
                 .defaultLockTimeout(config.getLockTimeout())
                 .lockAcquisitionTimeout(config.getLockAcquisitionTimeout())
                 .retryDelay(Duration.ofMillis(50))
-                .maxRetryAttempts(1000); // High retry count for long benchmarks
+                .maxRetryAttempts(1000) // High retry count for long benchmarks
+                .usePolling(); // FairLock recommended; avoids keyspace-notification overhead
 
         for (RedisClusterManager.RedisNodeInfo node : nodes) {
             configBuilder.addRedisNode(node.getHost(), node.getPort());

@@ -84,7 +84,8 @@ public class RedlockManager implements AutoCloseable {
         });
 
         // Initialize wait strategy
-        this.waitStrategy = WaitStrategyFactory.create(config.getWaitStrategy(), redisDrivers, config.getRetryDelay());
+        this.waitStrategy = WaitStrategyFactory.create(config.getWaitStrategy(), redisDrivers, config.getRetryDelay(),
+                config.getMaxRetryDelay(), config.getRetryDelayMultiplier(), config.getRetryDelayJitterRatio());
 
         logger.info("Created RedlockManager with {} driver, {} Redis nodes, and {} wait strategy", driverType,
                 redisDrivers.size(), config.getWaitStrategy());

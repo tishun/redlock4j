@@ -23,17 +23,20 @@ RedlockConfiguration config = RedlockConfiguration.builder()
 
 ### Configuration Properties
 
-| Method | Type | Default | Description |
-|--------|------|---------|-------------|
-| `addRedisNode(host, port)` | String, int | - | Adds a Redis node |
-| `addRedisNode(host, port, password)` | String, int, String | - | Adds a Redis node with password |
-| `defaultLockTimeout(Duration)` | Duration | 30s | Default lock TTL |
-| `retryDelay(Duration)` | Duration | 200ms | Delay between retry attempts |
-| `maxRetryAttempts(int)` | int | 3 | Maximum retry attempts |
-| `clockDriftFactor(double)` | double | 0.01 | Clock drift compensation |
-| `lockAcquisitionTimeout(Duration)` | Duration | 10s | Max time to wait for lock |
-| `usePolling()` | - | - | Use polling instead of keyspace notifications |
-| `waitStrategy(WaitStrategy)` | WaitStrategy | KEYSPACE_NOTIFICATIONS | Wait strategy |
+| Method                               | Type                | Default                | Description                                                                       |
+|--------------------------------------|---------------------|------------------------|-----------------------------------------------------------------------------------|
+| `addRedisNode(host, port)`           | String, int         | -                      | Adds a Redis node                                                                 |
+| `addRedisNode(host, port, password)` | String, int, String | -                      | Adds a Redis node with password                                                   |
+| `defaultLockTimeout(Duration)`       | Duration            | 30s                    | Default lock TTL                                                                  |
+| `retryDelay(Duration)`               | Duration            | 200ms                  | Delay between retry attempts                                                      |
+| `maxRetryDelay(Duration)`            | Duration            | = retryDelay           | Upper bound on retry delay after exponential backoff growth                       |
+| `retryDelayMultiplier(double)`       | double              | 1.0                    | Exponential backoff multiplier applied per retry attempt (must be >= 1.0)         |
+| `retryDelayJitterRatio(double)`      | double              | 0.0                    | Random jitter ratio added to retry delay to avoid retry storms (range [0.0, 1.0]) |
+| `maxRetryAttempts(int)`              | int                 | 3                      | Maximum retry attempts                                                            |
+| `clockDriftFactor(double)`           | double              | 0.01                   | Clock drift compensation                                                          |
+| `lockAcquisitionTimeout(Duration)`   | Duration            | 10s                    | Max time to wait for lock                                                         |
+| `usePolling()`                       | -                   | -                      | Use polling instead of keyspace notifications                                     |
+| `waitStrategy(WaitStrategy)`         | WaitStrategy        | KEYSPACE_NOTIFICATIONS | Wait strategy                                                                     |
 
 ---
 
@@ -58,12 +61,24 @@ RedisNodeConfiguration node = RedisNodeConfiguration.builder()
     .host("redis.example.com")
     .port(6379)
     .password("secretpassword")
+    .database(0)
     .connectionTimeoutMs(5000)
     .socketTimeoutMs(5000)
     .build();
 
 config.addRedisNode(node);
 ```
+
+### RedisNodeConfiguration Properties
+
+| Method                     | Type   | Default   | Description                               |
+|----------------------------|--------|-----------|-------------------------------------------|
+| `host(String)`             | String | localhost | Redis server hostname or IP               |
+| `port(int)`                | int    | 6379      | Redis server port                         |
+| `password(String)`         | String | null      | Authentication password                   |
+| `database(int)`            | int    | 0         | Redis database index                      |
+| `connectionTimeoutMs(int)` | int    | 2000      | Connection timeout in milliseconds        |
+| `socketTimeoutMs(int)`     | int    | 2000      | Socket read/write timeout in milliseconds |
 
 ---
 
@@ -106,11 +121,11 @@ RedlockConfiguration.builder()
 
 Valid deployment modes:
 
-| Nodes | Mode | Description |
-|:-----:|------|-------------|
-| 1 | Single-node | Optimized, no distributed consensus |
-| 2 | **Invalid** | Cannot form quorum |
-| 3+ | Multi-node | Distributed consensus with quorum |
+| Nodes  | Mode        | Description                         |
+|:------:|-------------|-------------------------------------|
+|   1    | Single-node | Optimized, no distributed consensus |
+|   2    | **Invalid** | Cannot form quorum                  |
+|   3+   | Multi-node  | Distributed consensus with quorum   |
 
 ### Single Node (Development)
 
@@ -179,11 +194,11 @@ public class ConfigurationExample {
 
 ### Lock TTL
 
-| Operation Duration | Recommended TTL |
-|-------------------|-----------------|
-| < 1 second | 5-10 seconds |
-| 1-10 seconds | 30-60 seconds |
-| > 10 seconds | Reconsider approach |
+| Operation Duration | Recommended TTL     |
+|--------------------|---------------------|
+| < 1 second         | 5-10 seconds        |
+| 1-10 seconds       | 30-60 seconds       |
+| > 10 seconds       | Reconsider approach |
 
 ### Retry Configuration
 

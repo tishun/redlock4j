@@ -14,13 +14,17 @@ AsyncRedlock asyncLock = manager.createAsyncLock("async-resource");
 
 ### Methods
 
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `tryLockAsync()` | `CompletionStage<Boolean>` | Tries to acquire the lock |
-| `tryLockAsync(Duration)` | `CompletionStage<Boolean>` | Tries with timeout |
-| `unlockAsync()` | `CompletionStage<Void>` | Releases the lock |
-| `isHeldByCurrentThread()` | `boolean` | Checks if held by current thread |
-| `getLockKey()` | `String` | Returns the lock key |
+| Method                       | Return Type                | Description                                             |
+|------------------------------|----------------------------|---------------------------------------------------------|
+| `tryLockAsync()`             | `CompletionStage<Boolean>` | Tries to acquire the lock                               |
+| `tryLockAsync(Duration)`     | `CompletionStage<Boolean>` | Tries with timeout                                      |
+| `lockAsync()`                | `CompletionStage<Void>`    | Acquires the lock, waiting if necessary                 |
+| `unlockAsync()`              | `CompletionStage<Void>`    | Releases the lock                                       |
+| `isHeldByCurrentThread()`    | `boolean`                  | Checks if held by current thread                        |
+| `getRemainingValidityTime()` | `Duration`                 | Remaining validity time, or `Duration.ZERO` if not held |
+| `getHoldCount()`             | `int`                      | Number of times the lock has been acquired, or 0        |
+| `getLockKey()`               | `String`                   | Returns the lock key                                    |
+| `extendAsync(Duration)`      | `CompletionStage<Boolean>` | Extends the lock validity time                          |
 
 ### Example
 
@@ -74,24 +78,31 @@ RxRedlock rxLock = manager.createRxLock("rx-resource");
 
 ### Methods
 
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `tryLockSingle()` | `Single<Boolean>` | Tries to acquire the lock |
-| `tryLockSingle(Duration)` | `Single<Boolean>` | Tries with timeout |
-| `unlockCompletable()` | `Completable` | Releases the lock |
-| `validityObservable(Duration)` | `Observable<Long>` | Emits remaining validity time |
-| `getLockKey()` | `String` | Returns the lock key |
+| Method                                                    | Return Type             | Description                                                               |
+|-----------------------------------------------------------|-------------------------|---------------------------------------------------------------------------|
+| `tryLockRx()`                                             | `Single<Boolean>`       | Tries to acquire the lock                                                 |
+| `tryLockRx(Duration)`                                     | `Single<Boolean>`       | Tries with timeout                                                        |
+| `lockRx()`                                                | `Completable`           | Acquires the lock, waiting if necessary                                   |
+| `unlockRx()`                                              | `Completable`           | Releases the lock                                                         |
+| `tryLockWithRetryRx(int maxRetries, Duration retryDelay)` | `Single<Boolean>`       | Tries to acquire with retry logic                                         |
+| `validityObservable(Duration checkInterval)`              | `Observable<Duration>`  | Emits remaining validity time at each check                               |
+| `lockStateObservable()`                                   | `Observable<LockState>` | Emits lock state changes (ACQUIRING, ACQUIRED, RELEASED, EXPIRED, FAILED) |
+| `isHeldByCurrentThread()`                                 | `boolean`               | Checks if held by current thread                                          |
+| `getRemainingValidityTime()`                              | `Duration`              | Remaining validity time, or `Duration.ZERO` if not held                   |
+| `getHoldCount()`                                          | `int`                   | Number of times the lock has been acquired, or 0                          |
+| `getLockKey()`                                            | `String`                | Returns the lock key                                                      |
+| `extendRx(Duration)`                                      | `Single<Boolean>`       | Extends the lock validity time                                            |
 
 ### Example
 
 ```java
 RxRedlock rxLock = manager.createRxLock("rx-resource");
 
-rxLock.tryLockSingle(Duration.ofSeconds(5))
+rxLock.tryLockRx(Duration.ofSeconds(5))
     .flatMapCompletable(acquired -> {
         if (acquired) {
             return performReactiveWork()
-                .andThen(rxLock.unlockCompletable());
+                .andThen(rxLock.unlockRx());
         }
         return Completable.complete();
     })
@@ -107,8 +118,8 @@ Monitor lock validity in real-time:
 
 ```java
 rxLock.validityObservable(Duration.ofSeconds(1))
-    .subscribe(remainingMs -> {
-        if (remainingMs < 5000) {
+    .subscribe(remaining -> {
+        if (remaining.toMillis() < 5000) {
             System.out.println("Warning: Lock expiring soon!");
         }
     });
@@ -127,7 +138,7 @@ AsyncRedlockImpl combinedLock = manager.createAsyncRxLock("combined-resource");
 combinedLock.tryLockAsync().thenAccept(acquired -> { ... });
 
 // Use as RxJava
-combinedLock.tryLockSingle().subscribe(acquired -> { ... });
+combinedLock.tryLockRx().subscribe(acquired -> { ... });
 ```
 
 ---
@@ -148,7 +159,7 @@ asyncLock.tryLockAsync()
     });
 
 // RxJava auto-renewal
-rxLock.tryLockSingle()
+rxLock.tryLockRx()
     .flatMapCompletable(acquired -> {
         if (acquired) {
             return longRunningReactiveOperation();
@@ -177,7 +188,7 @@ asyncLock.tryLockAsync()
 ### RxJava
 
 ```java
-rxLock.tryLockSingle()
+rxLock.tryLockRx()
     .onErrorReturn(ex -> {
         logger.error("Lock failed", ex);
         return false;

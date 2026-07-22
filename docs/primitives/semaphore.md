@@ -4,12 +4,12 @@ Semaphore limits concurrent access to a shared resource with a configurable numb
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Type** | Counting Semaphore |
-| **Permits** | Configurable (1 to N) |
-| **Fairness** | Non-fair (first-come basis) |
-| **Expiration** | Auto-release on timeout |
+| Property       | Value                       |
+|----------------|-----------------------------|
+| **Type**       | Counting Semaphore          |
+| **Permits**    | Configurable (1 to N)       |
+| **Fairness**   | Non-fair (first-come basis) |
+| **Expiration** | Auto-release on timeout     |
 
 ## How It Works
 
@@ -111,38 +111,38 @@ if (semaphore.tryAcquire(3, Duration.ofSeconds(5))) {
 
 ## Use Cases
 
-| Scenario | Permits | Purpose |
-|----------|---------|---------|
-| API rate limit | 10/sec | Prevent quota exhaustion |
-| DB connection pool | 20 | Limit concurrent connections |
-| File uploads | 5 | Control bandwidth usage |
-| Batch jobs | 3 | Prevent resource starvation |
+| Scenario           | Permits  | Purpose                      |
+|--------------------|----------|------------------------------|
+| API rate limit     | 10/sec   | Prevent quota exhaustion     |
+| DB connection pool | 20       | Limit concurrent connections |
+| File uploads       | 5        | Control bandwidth usage      |
+| Batch jobs         | 3        | Prevent resource starvation  |
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | Permit set on single instance |
-| **Multi-Node (Quorum)** | ✅ | Permits tracked per node, quorum required |
+| Mode                    | Supported  | Notes                                     |
+|-------------------------|------------|-------------------------------------------|
+| **Single Node**         | Yes        | Permit set on single instance             |
+| **Multi-Node (Quorum)** | Yes        | Permits tracked per node, quorum required |
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `maxPermits` | (required) | Maximum concurrent permits |
-| `permitTimeoutMs` | 30000 | Auto-release timeout |
-| `acquisitionTimeoutMs` | 10000 | Max wait time for permit |
+| Parameter              | Default    | Description                |
+|------------------------|------------|----------------------------|
+| `maxPermits`           | (required) | Maximum concurrent permits |
+| `permitTimeoutMs`      | 30000      | Auto-release timeout       |
+| `acquisitionTimeoutMs` | 10000      | Max wait time for permit   |
 
 ## Methods
 
-| Method | Description |
-|--------|-------------|
-| `acquire()` | Block until permit available |
-| `tryAcquire(Duration)` | Try with timeout |
-| `tryAcquire(int, Duration)` | Try for multiple permits |
-| `release()` | Release one permit |
-| `release(int)` | Release multiple permits |
-| `availablePermits()` | Current available count |
+| Method                      | Description                  |
+|-----------------------------|------------------------------|
+| `acquire()`                 | Block until permit available |
+| `tryAcquire(Duration)`      | Try with timeout             |
+| `tryAcquire(int, Duration)` | Try for multiple permits     |
+| `release()`                 | Release one permit           |
+| `release(int)`              | Release multiple permits     |
+| `availablePermits()`        | Current available count      |
 
 ## When to Use
 

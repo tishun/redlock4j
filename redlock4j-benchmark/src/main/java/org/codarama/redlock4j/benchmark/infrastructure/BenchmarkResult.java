@@ -16,7 +16,7 @@ public class BenchmarkResult {
 
     private final String clientId;
     private final String implementationType;
-    private final Instant startTime;
+    private volatile Instant startTime;
     private volatile Instant endTime;
 
     private final AtomicLong successfulLockAcquisitions = new AtomicLong(0);
@@ -25,12 +25,29 @@ public class BenchmarkResult {
     private final AtomicLong totalLockWaitTimeNanos = new AtomicLong(0);
     private final AtomicLong correctnessViolations = new AtomicLong(0);
     private final AtomicLong fifoViolations = new AtomicLong(0);
-    
+
     private final Map<String, Long> latencyPercentiles = new ConcurrentHashMap<>();
 
     public BenchmarkResult(String clientId, String implementationType) {
         this.clientId = clientId;
         this.implementationType = implementationType;
+        this.startTime = Instant.now();
+    }
+
+    /**
+     * Resets all accumulated counters and restarts the measurement clock.
+     * Intended for use at the warmup/measurement boundary so only post-warmup
+     * operations contribute to the reported metrics.
+     */
+    public void reset() {
+        successfulLockAcquisitions.set(0);
+        failedLockAcquisitions.set(0);
+        totalLockHoldTimeNanos.set(0);
+        totalLockWaitTimeNanos.set(0);
+        correctnessViolations.set(0);
+        fifoViolations.set(0);
+        latencyPercentiles.clear();
+        this.endTime = null;
         this.startTime = Instant.now();
     }
 

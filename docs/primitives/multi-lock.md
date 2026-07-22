@@ -4,12 +4,12 @@ MultiLock enables atomic acquisition of multiple resources, preventing deadlocks
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Type** | Exclusive Lock (multiple keys) |
-| **Reentrancy** | Supported (per-thread) |
-| **Interface** | `java.util.concurrent.locks.Lock` |
-| **Deadlock Prevention** | Sorted key ordering |
+| Property                | Value                             |
+|-------------------------|-----------------------------------|
+| **Type**                | Exclusive Lock (multiple keys)    |
+| **Reentrancy**          | Supported (per-thread)            |
+| **Interface**           | `java.util.concurrent.locks.Lock` |
+| **Deadlock Prevention** | Sorted key ordering               |
 
 ## How It Works
 
@@ -139,29 +139,29 @@ try {
 
 Without consistent ordering, deadlocks can occur:
 
-| Time | Client A | Client B |
-|------|----------|----------|
-| T1 | Lock account:1 ✓ | Lock account:2 ✓ |
-| T2 | Wait account:2 | Wait account:1 |
-| T3 | **DEADLOCK** | **DEADLOCK** |
+| Time  | Client A         | Client B         |
+|-------|------------------|------------------|
+| T1    | Lock account:1 ✓ | Lock account:2 ✓ |
+| T2    | Wait account:2   | Wait account:1   |
+| T3    | **DEADLOCK**     | **DEADLOCK**     |
 
 With sorted ordering, both clients lock `account:1` first → no deadlock.
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | All keys locked on single instance |
-| **Multi-Node (Quorum)** | ✅ | All keys must achieve quorum on each node |
+| Mode                    | Supported  | Notes                                     |
+|-------------------------|------------|-------------------------------------------|
+| **Single Node**         | Yes        | All keys locked on single instance        |
+| **Multi-Node (Quorum)** | Yes        | All keys must achieve quorum on each node |
 
 In multi-node mode, ALL keys must be successfully locked on a quorum of nodes for the MultiLock to succeed.
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `lockTimeoutMs` | 30000 | Lock TTL per key |
-| `acquisitionTimeoutMs` | 10000 | Max total wait time |
+| Parameter              | Default | Description         |
+|------------------------|---------|---------------------|
+| `lockTimeoutMs`        | 30000   | Lock TTL per key    |
+| `acquisitionTimeoutMs` | 10000   | Max total wait time |
 
 ## When to Use
 

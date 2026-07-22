@@ -20,6 +20,9 @@ public class RedlockConfiguration {
     private final List<RedisNodeConfiguration> redisNodes;
     private final Duration defaultLockTimeout;
     private final Duration retryDelay;
+    private final Duration maxRetryDelay;
+    private final double retryDelayMultiplier;
+    private final double retryDelayJitterRatio;
     private final int maxRetryAttempts;
     private final double clockDriftFactor;
     private final Duration lockAcquisitionTimeout;
@@ -29,6 +32,9 @@ public class RedlockConfiguration {
         this.redisNodes = new ArrayList<>(builder.redisNodes);
         this.defaultLockTimeout = builder.defaultLockTimeout;
         this.retryDelay = builder.retryDelay;
+        this.maxRetryDelay = builder.maxRetryDelay != null ? builder.maxRetryDelay : builder.retryDelay;
+        this.retryDelayMultiplier = builder.retryDelayMultiplier;
+        this.retryDelayJitterRatio = builder.retryDelayJitterRatio;
         this.maxRetryAttempts = builder.maxRetryAttempts;
         this.clockDriftFactor = builder.clockDriftFactor;
         this.lockAcquisitionTimeout = builder.lockAcquisitionTimeout;
@@ -60,6 +66,46 @@ public class RedlockConfiguration {
      */
     public Duration getRetryDelay() {
         return retryDelay;
+    }
+
+    /**
+     * Returns the upper bound on the retry delay after exponential backoff growth.
+     *
+     * <p>
+     * When {@link #getRetryDelayMultiplier()} is greater than 1.0, the effective delay grows with each retry attempt
+     * but is capped at this value. Defaults to {@link #getRetryDelay()} (no growth).
+     * </p>
+     *
+     * @return maximum retry delay
+     */
+    public Duration getMaxRetryDelay() {
+        return maxRetryDelay;
+    }
+
+    /**
+     * Returns the multiplier applied per retry attempt for exponential backoff.
+     *
+     * <p>
+     * Effective delay = min(maxRetryDelay, retryDelay * multiplier^attempt). A value of 1.0 disables growth.
+     * </p>
+     *
+     * @return retry delay multiplier (>= 1.0)
+     */
+    public double getRetryDelayMultiplier() {
+        return retryDelayMultiplier;
+    }
+
+    /**
+     * Returns the jitter ratio applied to the computed retry delay.
+     *
+     * <p>
+     * The actual sleep is sampled uniformly from [(1-r)*delay, (1+r)*delay]. A value of 0.0 disables jitter.
+     * </p>
+     *
+     * @return jitter ratio in [0.0, 1.0]
+     */
+    public double getRetryDelayJitterRatio() {
+        return retryDelayJitterRatio;
     }
 
     /**
@@ -143,6 +189,9 @@ public class RedlockConfiguration {
         private final List<RedisNodeConfiguration> redisNodes = new ArrayList<>();
         private Duration defaultLockTimeout = Duration.ofSeconds(30);
         private Duration retryDelay = Duration.ofMillis(200);
+        private Duration maxRetryDelay = null;
+        private double retryDelayMultiplier = 1.0;
+        private double retryDelayJitterRatio = 0.0;
         private int maxRetryAttempts = 3;
         private double clockDriftFactor = 0.01;
         private Duration lockAcquisitionTimeout = Duration.ofSeconds(10);
@@ -209,6 +258,51 @@ public class RedlockConfiguration {
          */
         public Builder retryDelay(Duration delay) {
             this.retryDelay = delay;
+            return this;
+        }
+
+        /**
+         * Sets the upper bound on the retry delay after exponential backoff growth. Default: equal to
+         * {@link #retryDelay(Duration)} (no growth).
+         *
+         * @param maxDelay
+         *            the maximum retry delay duration
+         * @return this builder
+         */
+        public Builder maxRetryDelay(Duration maxDelay) {
+            this.maxRetryDelay = maxDelay;
+            return this;
+        }
+
+        /**
+         * Sets the multiplier applied per retry attempt for exponential backoff. Default: 1.0 (no growth).
+         *
+         * <p>
+         * Effective delay = min(maxRetryDelay, retryDelay * multiplier^attempt).
+         * </p>
+         *
+         * @param multiplier
+         *            the multiplier (must be >= 1.0)
+         * @return this builder
+         */
+        public Builder retryDelayMultiplier(double multiplier) {
+            this.retryDelayMultiplier = multiplier;
+            return this;
+        }
+
+        /**
+         * Sets the jitter ratio applied to the computed retry delay. Default: 0.0 (no jitter).
+         *
+         * <p>
+         * The actual sleep is sampled uniformly from [(1-r)*delay, (1+r)*delay].
+         * </p>
+         *
+         * @param ratio
+         *            the jitter ratio in [0.0, 1.0]
+         * @return this builder
+         */
+        public Builder retryDelayJitterRatio(double ratio) {
+            this.retryDelayJitterRatio = ratio;
             return this;
         }
 
@@ -319,6 +413,15 @@ public class RedlockConfiguration {
             }
             if (retryDelay == null || retryDelay.isNegative()) {
                 throw new IllegalArgumentException("Retry delay cannot be negative");
+            }
+            if (maxRetryDelay != null && (maxRetryDelay.isNegative() || maxRetryDelay.compareTo(retryDelay) < 0)) {
+                throw new IllegalArgumentException("Max retry delay must be >= retry delay");
+            }
+            if (retryDelayMultiplier < 1.0) {
+                throw new IllegalArgumentException("Retry delay multiplier must be >= 1.0");
+            }
+            if (retryDelayJitterRatio < 0.0 || retryDelayJitterRatio > 1.0) {
+                throw new IllegalArgumentException("Retry delay jitter ratio must be between 0.0 and 1.0");
             }
             if (maxRetryAttempts < 0) {
                 throw new IllegalArgumentException("Max retry attempts cannot be negative");

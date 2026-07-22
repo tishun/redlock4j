@@ -16,9 +16,7 @@ Both libraries implement distributed countdown latches for coordinating multiple
 
 ```java
 // Create latch waiting for 3 operations
-RedlockCountDownLatch latch = new RedlockCountDownLatch(
-    "startup", 3, redisDrivers, config
-);
+RedlockCountDownLatch latch = manager.createCountDownLatch("startup", 3);
 
 // Worker threads
 new Thread(() -> {
@@ -80,7 +78,7 @@ System.out.println("All services initialized!");
 - Counter replicated across all nodes
 - Quorum-based count reads
 - Quorum-based decrements
-- Pub/sub for zero notification
+- Atomic per-node decrement + publish (single Lua script)
 - Local latch for waiting
 - Automatic expiration (10x lock timeout)
 
@@ -89,10 +87,10 @@ System.out.println("All services initialized!");
 RedlockCountDownLatch
   ├─ latchKey (counter key)
   ├─ channelKey (pub/sub)
-  ├─ List<RedisDriver> (quorum-based)
+  ├─ LockExecutionStrategy (node fan-out + quorum)
   ├─ CountDownLatch localLatch (for waiting)
   ├─ AtomicBoolean subscribed
-  └─ Quorum-based DECR
+  └─ Atomic DECR + PUBLISH (decrAndPublishIfZero)
 ```
 
 ### Redisson
@@ -126,84 +124,73 @@ RedissonCountDownLatch
 
 ### redlock4j
 
-**Initialization**: Automatic in constructor
+**Initialization**: Automatic when created via the manager factory. Users call
+`manager.createCountDownLatch(latchKey, count)`; the manager wires the internal
+drivers and execution strategy and seeds the counter on all nodes with a long
+expiration (10x lock timeout).
 
 ```java
-public RedlockCountDownLatch(String latchKey, int count,
-                             List<RedisDriver> redisDrivers,
-                             RedlockConfiguration config) {
-    this.latchKey = latchKey;
-    this.channelKey = latchKey + ":channel";
-    this.initialCount = count;
-    this.localLatch = new CountDownLatch(1);
+// Simplified/conceptual pseudocode of the internal setup
+this.latchKey = latchKey;
+this.channelKey = latchKey + ":channel";
+this.initialCount = count;
+this.localLatch = new CountDownLatch(1);
 
-    // Initialize on all nodes
-    initializeLatch(count);
-}
-
-private void initializeLatch(int count) {
-    String countValue = String.valueOf(count);
-    int successfulNodes = 0;
-
-    for (RedisDriver driver : redisDrivers) {
-        // Set with long expiration (10x lock timeout)
-        driver.setex(latchKey, countValue,
-
+// Seed the counter on the nodes via the execution strategy,
+// with a long expiration (10x lock timeout)
+executionStrategy.executeOnNodes(driver -> {
+    driver.setex(latchKey, String.valueOf(count),
+                 config.getDefaultLockTimeout().toMillis() * 10);
+    return true;
+});
+```
 
 ## Count Down Operation
 
 ### redlock4j
 
-**Algorithm**: Quorum-based DECR with notification
+**Algorithm**: Atomic per-node decrement-and-publish, fanned out via the execution strategy
 
 ```java
 public void countDown() {
-    int successfulNodes = 0;
-    long newCount = -1;
-
-    // Decrement on all nodes
-    for (RedisDriver driver : redisDrivers) {
+    // Fan out to the appropriate nodes via the execution strategy
+    int successCount = executionStrategy.executeOnNodes(driver -> {
         try {
-            long count = driver.decr(latchKey);
-            newCount = count;
-            successfulNodes++;
+            // Atomic: decrement and publish "zero" if the count hits zero,
+            // in a single Lua script (decrAndPublishIfZero)
+            long count = driver.decrAndPublishIfZero(latchKey, channelKey, "zero");
+            return true;
         } catch (Exception e) {
-            logger.debug("Failed to decrement on {}", driver.getIdentifier());
+            logger.debug("Failed to decrement latch count on {}", driver.getIdentifier());
+            return false;
         }
-    }
+    });
 
-    // Check quorum
-    if (successfulNodes >= config.getQuorum()) {
-        // If reached zero, publish notification
-        if (newCount <= 0) {
-            publishZeroNotification();
-        }
+    if (executionStrategy.isSuccessful(successCount)) {
+        logger.debug("Successfully decremented latch {} on {} nodes", latchKey, successCount);
     } else {
-        logger.warn("Failed to decrement on quorum");
-    }
-}
-
-private void publishZeroNotification() {
-    for (RedisDriver driver : redisDrivers) {
-        try {
-            long subscribers = driver.publish(channelKey, "zero");
-            logger.debug("Published to {} subscribers", subscribers);
-        } catch (Exception e) {
-            logger.debug("Failed to publish on {}", driver.getIdentifier());
-        }
+        logger.warn("Failed to decrement latch {} on sufficient nodes", latchKey);
     }
 }
 ```
 
+Where `decrAndPublishIfZero` runs this Lua script atomically on each node:
+
+```lua
+local count = redis.call("DECR", KEYS[1])
+if count <= 0 then
+    redis.call("PUBLISH", KEYS[2], ARGV[1])
+end
+return count
+```
+
 **Characteristics**:
-- DECR on all nodes
-- Quorum check for success
-- Publish to all nodes when zero
-- No atomicity between decrement and publish
+- Atomic DECR + PUBLISH per node (single Lua script)
+- Fan-out and quorum check delegated to the execution strategy
+- Decrement and zero-notification cannot interleave on a node
 
 **Redis Operations** (M nodes):
-- M × `DECR`
-- M × `PUBLISH` (if zero)
+- M × `decrAndPublishIfZero` Lua script (DECR, plus PUBLISH when zero)
 
 ### Redisson
 
@@ -236,7 +223,7 @@ end;
 **Algorithm**: Subscribe + poll with local latch
 
 ```java
-public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
+public boolean await(Duration timeout) throws InterruptedException {
     // Subscribe to notifications
     subscribeToNotifications();
 
@@ -247,17 +234,14 @@ public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
     }
 
     // Wait on local latch (released by pub/sub notification)
-    boolean completed = localLatch.await(timeout, unit);
-
-    return completed;
+    return localLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
 }
 
 private void subscribeToNotifications() {
     if (subscribed.compareAndSet(false, true)) {
         new Thread(() -> {
-            // Subscribe to first driver
-            RedisDriver driver = redisDrivers.get(0);
-            driver.subscribe(new MessageHandler() {
+            // Subscribe on a single node
+            subscriptionDriver.subscribe(new MessageHandler() {
                 @Override
                 public void onMessage(String channel, String message) {
                     if ("zero".equals(message)) {
@@ -270,19 +254,22 @@ private void subscribeToNotifications() {
 }
 
 public long getCount() {
-    int successfulReads = 0;
-    long totalCount = 0;
+    List<Long> results = new ArrayList<>();
 
-    for (RedisDriver driver : redisDrivers) {
+    // Read the count from the appropriate nodes via the execution strategy
+    executionStrategy.executeOnNodes(driver -> {
         String countStr = driver.get(latchKey);
         if (countStr != null) {
-            totalCount += Long.parseLong(countStr);
-            successfulReads++;
+            synchronized (results) {
+                results.add(Long.parseLong(countStr));
+            }
         }
-    }
+        return true;
+    });
 
-    if (successfulReads >= config.getQuorum()) {
-        return Math.max(0, totalCount / successfulReads);
+    if (!results.isEmpty()) {
+        long total = results.stream().mapToLong(Long::longValue).sum();
+        return Math.max(0, total / results.size()); // Average across nodes
     }
 
     return 0; // Conservative fallback
@@ -353,16 +340,17 @@ public long getCount() {
 
 ```java
 public void reset() {
-    // Delete existing latch
-    for (RedisDriver driver : redisDrivers) {
+    // Delete the existing latch on the appropriate nodes
+    executionStrategy.executeOnNodes(driver -> {
         driver.del(latchKey);
-    }
+        return true;
+    });
 
     // Reset local state
     localLatch = new CountDownLatch(1);
     subscribed.set(false);
 
-    // Reinitialize
+    // Reinitialize with the original count
     initializeLatch(initialCount);
 }
 ```
@@ -398,9 +386,8 @@ latch.trySetCount(initialCount);
 ### redlock4j
 
 **Count Down** (M nodes):
-- M × `DECR`
-- M × `PUBLISH` (if zero)
-- Total: M or 2M operations
+- M × `decrAndPublishIfZero` Lua script (atomic DECR, plus PUBLISH when zero)
+- Total: M script executions
 
 **Await**:
 - 1 × `SUBSCRIBE`
@@ -432,24 +419,35 @@ latch.trySetCount(initialCount);
 - Single round trip for countDown
 - Polling overhead for await
 
+### Measured Performance
+
+Benchmark: 5 clients, count=5, 50 ms work per cycle, 3-node Redis 7 cluster, 60 s measurement (full methodology in [Architecture › Performance Analysis](../guide/architecture.md#performance-analysis)).
+
+| Implementation         | Ops/s     | p50 (ms)  | p99 (ms)  | mean (ms) | success |
+|------------------------|----------:|----------:|----------:|----------:|--------:|
+| Redisson               |     59.02 |     17.17 |     22.57 |     16.91 |   100 % |
+| redlock4j-singlenode   |     58.19 |     16.17 |     19.87 |     15.67 |   100 % |
+| **redlock4j-3node**    | **59.91** | **15.29** | **19.89** | **15.18** |   100 % |
+
+**Reading the numbers**: `redlock4j-3node` matches Redisson on throughput while delivering slightly lower p50/p99/mean latency. Quorum overhead is fully amortized by the parallel multi-node I/O — coordination primitives benefit from multi-node distribution rather than paying for it.
+
 ## Safety & Correctness
 
 ### redlock4j
 
 **Safety Guarantees**:
-- ✅ Quorum-based consistency
-- ✅ Survives minority node failures
-- ✅ Count averaged across nodes
-- ✅ Automatic expiration
-- ✅ No single point of failure
+- Quorum-based consistency
+- Survives minority node failures
+- Count averaged across nodes
+- Automatic expiration
+- No single point of failure
 
 **Potential Issues**:
-- ⚠️ Higher latency
-- ⚠️ More network overhead
-- ⚠️ Non-atomic decrement + publish
-- ⚠️ Subscribe to single node only
-- ⚠️ Count averaging may be inaccurate
-- ⚠️ Reset not atomic
+- Higher latency
+- More network overhead
+- Subscribe to single node only
+- Count averaging may be inaccurate
+- Reset not atomic
 
 **Consistency Model**:
 ```
@@ -458,26 +456,26 @@ Count decremented if:
   - Average count used for reads
 
 Notification sent if:
-  - Any node reaches zero
-  - Published to all nodes
+  - The decrement drives a node's count to zero
+  - Decrement + publish are atomic on that node (single Lua script)
 ```
 
 
 ### Redisson
 
 **Safety Guarantees**:
-- ✅ Atomic operations (Lua scripts)
-- ✅ Accurate count
-- ✅ Pub/sub notifications
-- ✅ Async/reactive support
-- ✅ Low latency
+- Atomic operations (Lua scripts)
+- Accurate count
+- Pub/sub notifications
+- Async/reactive support
+- Low latency
 
 **Potential Issues**:
-- ⚠️ Single point of failure
-- ⚠️ No quorum mechanism
-- ⚠️ No automatic expiration
-- ⚠️ Polling in await loop
-- ⚠️ Reset not atomic
+- Single point of failure
+- No quorum mechanism
+- No automatic expiration
+- Polling in await loop
+- Reset not atomic
 
 **Consistency Model**:
 ```
@@ -492,22 +490,22 @@ Notification sent if:
 
 ## Feature Comparison Table
 
-| Feature | redlock4j | Redisson |
-|---------|-----------|----------|
-| **Data Model** | Counter on all nodes | Single counter |
-| **Quorum** | Yes | No |
-| **Fault Tolerance** | Survives minority failures | Single point of failure |
-| **Initialization** | Automatic in constructor | Explicit via trySetCount() |
-| **Expiration** | Automatic (10x timeout) | No automatic expiration |
-| **Count Accuracy** | Average across nodes | Exact |
-| **Atomicity** | Non-atomic (DECR + PUBLISH) | Atomic (Lua script) |
-| **Subscription** | Single node | Managed pub/sub service |
-| **Reset** | Supported (non-standard) | Supported via delete + trySetCount |
-| **Async Support** | No | Yes |
-| **Reactive Support** | No | Yes |
-| **Performance** | O(M) | O(1) for countDown |
-| **Latency** | Higher | Lower |
-| **Network Overhead** | High | Low |
+| Feature              | redlock4j                                   | Redisson                           |
+|----------------------|---------------------------------------------|------------------------------------|
+| **Data Model**       | Counter on all nodes                        | Single counter                     |
+| **Quorum**           | Yes                                         | No                                 |
+| **Fault Tolerance**  | Survives minority failures                  | Single point of failure            |
+| **Initialization**   | Automatic via manager factory               | Explicit via trySetCount()         |
+| **Expiration**       | Automatic (10x timeout)                     | No automatic expiration            |
+| **Count Accuracy**   | Average across nodes                        | Exact                              |
+| **Atomicity**        | Atomic per-node DECR + PUBLISH (Lua script) | Atomic (Lua script)                |
+| **Subscription**     | Single node                                 | Managed pub/sub service            |
+| **Reset**            | Supported (non-standard)                    | Supported via delete + trySetCount |
+| **Async Support**    | No                                          | Yes                                |
+| **Reactive Support** | No                                          | Yes                                |
+| **Performance**      | O(M)                                        | O(1) for countDown                 |
+| **Latency**          | Higher                                      | Lower                              |
+| **Network Overhead** | High                                        | Low                                |
 
 ## Use Case Comparison
 
@@ -523,19 +521,13 @@ Notification sent if:
 **Example Scenarios**:
 ```java
 // Distributed service startup coordination
-RedlockCountDownLatch startupLatch = new RedlockCountDownLatch(
-    "app:startup", 5, redisDrivers, config
-);
+RedlockCountDownLatch startupLatch = manager.createCountDownLatch("app:startup", 5);
 
 // Batch job coordination
-RedlockCountDownLatch batchLatch = new RedlockCountDownLatch(
-    "batch:job:123", 100, redisDrivers, config
-);
+RedlockCountDownLatch batchLatch = manager.createCountDownLatch("batch:job:123", 100);
 
 // Multi-stage workflow
-RedlockCountDownLatch stageLatch = new RedlockCountDownLatch(
-    "workflow:stage1", 10, redisDrivers, config
-);
+RedlockCountDownLatch stageLatch = manager.createCountDownLatch("workflow:stage1", 10);
 ```
 
 ### Redisson RedissonCountDownLatch
@@ -570,20 +562,20 @@ reusableLatch.trySetCount(5); // Reuse
 
 ### Choose redlock4j RedlockCountDownLatch when:
 
-- ✅ Need quorum-based distributed consistency
-- ✅ Require fault tolerance (multi-master)
-- ✅ Automatic expiration is important
-- ✅ Can tolerate higher latency
-- ✅ Count averaging is acceptable
+- Need quorum-based distributed consistency
+- Require fault tolerance (multi-master)
+- Automatic expiration is important
+- Can tolerate higher latency
+- Count averaging is acceptable
 
 ### Choose Redisson RedissonCountDownLatch when:
 
-- ✅ Single Redis instance is acceptable
-- ✅ Need high throughput / low latency
-- ✅ Require exact count tracking
-- ✅ Need async/reactive APIs
-- ✅ Want atomic operations
-- ✅ Explicit initialization preferred
+- Single Redis instance is acceptable
+- Need high throughput / low latency
+- Require exact count tracking
+- Need async/reactive APIs
+- Want atomic operations
+- Explicit initialization preferred
 
 ## Migration Considerations
 
@@ -596,9 +588,7 @@ latch.trySetCount(3);
 latch.await();
 
 // After (redlock4j)
-RedlockCountDownLatch latch = new RedlockCountDownLatch(
-    "startup", 3, redisDrivers, config
-);
+RedlockCountDownLatch latch = manager.createCountDownLatch("startup", 3);
 latch.await();
 ```
 
@@ -616,9 +606,7 @@ latch.await();
 
 ```java
 // Before (redlock4j)
-RedlockCountDownLatch latch = new RedlockCountDownLatch(
-    "startup", 3, redisDrivers, config
-);
+RedlockCountDownLatch latch = manager.createCountDownLatch("startup", 3);
 
 // After (Redisson)
 RCountDownLatch latch = redisson.getCountDownLatch("startup");

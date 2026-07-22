@@ -121,7 +121,7 @@ The documentation supports:
 
 ```markdown
 \`\`\`java
-Lock lock = redlock.lock("resource", 10000);
+Lock lock = manager.createLock("resource");
 \`\`\`
 ```
 

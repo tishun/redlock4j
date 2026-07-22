@@ -8,6 +8,7 @@ import org.codarama.redlock4j.configuration.RedlockConfiguration;
 import org.codarama.redlock4j.driver.RedisDriver;
 import org.codarama.redlock4j.strategy.LockExecutionStrategy;
 import org.codarama.redlock4j.strategy.LockExecutionStrategyFactory;
+import org.codarama.redlock4j.strategy.BackoffCalculator;
 import org.codarama.redlock4j.strategy.LockWaitStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -152,10 +153,34 @@ public abstract class AbstractRedlock {
      *             if the thread is interrupted while waiting
      */
     protected void waitForLockRelease(String lockKey, long remainingTimeoutMs) throws InterruptedException {
+        waitForLockRelease(lockKey, remainingTimeoutMs, 0);
+    }
+
+    /**
+     * Attempt-aware variant of {@link #waitForLockRelease(String, long)}. The {@code attempt} parameter is forwarded to
+     * the configured wait strategy so that strategies honoring exponential backoff can grow the wait between successive
+     * retries. The no-wait-strategy fallback applies the same backoff formula via {@link BackoffCalculator}.
+     *
+     * @param lockKey
+     *            the key of the lock to wait for
+     * @param remainingTimeoutMs
+     *            remaining timeout in milliseconds
+     * @param attempt
+     *            0-based attempt counter
+     * @throws InterruptedException
+     *             if the thread is interrupted while waiting
+     */
+    protected void waitForLockRelease(String lockKey, long remainingTimeoutMs, int attempt)
+            throws InterruptedException {
         if (waitStrategy != null) {
-            waitStrategy.waitForRelease(lockKey, Duration.ofMillis(Math.max(remainingTimeoutMs, 1)));
+            waitStrategy.waitForRelease(lockKey, Duration.ofMillis(Math.max(remainingTimeoutMs, 1)), attempt);
         } else {
-            Thread.sleep(config.getRetryDelay().toMillis());
+            Duration delay = BackoffCalculator.compute(config.getRetryDelay(), config.getMaxRetryDelay(),
+                    config.getRetryDelayMultiplier(), config.getRetryDelayJitterRatio(), attempt);
+            long sleepMs = Math.min(delay.toMillis(), Math.max(remainingTimeoutMs, 1));
+            if (sleepMs > 0) {
+                Thread.sleep(sleepMs);
+            }
         }
     }
 

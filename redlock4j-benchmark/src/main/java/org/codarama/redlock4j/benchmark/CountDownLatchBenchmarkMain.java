@@ -53,7 +53,7 @@ public class CountDownLatchBenchmarkMain {
         }
 
         MarkdownReportGenerator reportGenerator = new MarkdownReportGenerator();
-        String report = reportGenerator.generate(config, allResults);
+        String report = reportGenerator.generate("CountDownLatch", config, allResults);
 
         Path outputPath = Paths.get("countdownlatch-benchmark-results.md");
         try {
@@ -62,6 +62,15 @@ public class CountDownLatchBenchmarkMain {
             logger.info("Results written to: {}", outputPath.toAbsolutePath());
         } catch (Exception e) {
             logger.error("Failed to write report: {}", e.getMessage());
+        }
+
+        JsonReportGenerator jsonGenerator = new JsonReportGenerator();
+        String json = jsonGenerator.generate("CountDownLatch", config, allResults);
+        Path jsonOutputPath = Paths.get("countdownlatch-benchmark-results.json");
+        try {
+            jsonGenerator.writeToFile(json, jsonOutputPath);
+        } catch (Exception e) {
+            logger.error("Failed to write JSON report: {}", e.getMessage());
         }
 
         System.out.println("\n" + report);

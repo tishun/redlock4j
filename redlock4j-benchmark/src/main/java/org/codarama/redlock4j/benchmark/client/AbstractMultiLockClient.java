@@ -29,14 +29,24 @@ public abstract class AbstractMultiLockClient implements MultiLockBenchmarkClien
         // Generate resource names for multi-lock (e.g., account:1, account:2, account:3)
         List<String> resourceNames = generateResourceNames(config.getMultiLockResourceCount());
         Lock multiLock = getMultiLock(resourceNames);
-        
-        long endTime = System.currentTimeMillis() + config.getBenchmarkDuration().toMillis();
-        long workTimeNanos = config.getWorkSimulationTime().toNanos();
 
-        logger.info("Client {} ({}) starting multi-lock benchmark with {} resources", 
-                clientId, getImplementationType(), resourceNames.size());
+        long now = System.currentTimeMillis();
+        long warmupEnd = now + config.getWarmupDuration().toMillis();
+        long endTime = warmupEnd + config.getBenchmarkDuration().toMillis();
+        long workTimeNanos = config.getWorkSimulationTime().toNanos();
+        boolean inWarmup = config.getWarmupDuration().toMillis() > 0;
+
+        logger.info("Client {} ({}) starting multi-lock benchmark with {} resources (warmup {}s + measure {}s)",
+                clientId, getImplementationType(), resourceNames.size(),
+                config.getWarmupDuration().getSeconds(), config.getBenchmarkDuration().getSeconds());
 
         while (System.currentTimeMillis() < endTime && !Thread.currentThread().isInterrupted()) {
+            if (inWarmup && System.currentTimeMillis() >= warmupEnd) {
+                inWarmup = false;
+                waitTimes.clear();
+                result.reset();
+                logger.info("Client {} warmup complete, beginning measurement", clientId);
+            }
             long waitStartNanos = System.nanoTime();
             boolean acquired = false;
 

@@ -29,6 +29,8 @@ public class BenchmarkResultsAggregator {
         public final long totalFailedOps;
         public final double aggregateOpsPerSecond;
         public final double avgOpsPerSecondPerClient;
+        public final double opsPerSecondPerClientStdev;
+        public final double opsPerSecondPerClientCi95Half;
         public final double avgWaitTimeMs;
         public final double avgHoldTimeMs;
         public final long totalCorrectnessViolations;
@@ -38,6 +40,7 @@ public class BenchmarkResultsAggregator {
 
         public AggregatedResult(String implementationType, int clientCount, long totalSuccessfulOps,
                 long totalFailedOps, double aggregateOpsPerSecond, double avgOpsPerSecondPerClient,
+                double opsPerSecondPerClientStdev, double opsPerSecondPerClientCi95Half,
                 double avgWaitTimeMs, double avgHoldTimeMs, long totalCorrectnessViolations,
                 long totalFifoViolations, Map<String, Long> aggregatedLatencyPercentiles,
                 ValidationResult validationResult) {
@@ -47,6 +50,8 @@ public class BenchmarkResultsAggregator {
             this.totalFailedOps = totalFailedOps;
             this.aggregateOpsPerSecond = aggregateOpsPerSecond;
             this.avgOpsPerSecondPerClient = avgOpsPerSecondPerClient;
+            this.opsPerSecondPerClientStdev = opsPerSecondPerClientStdev;
+            this.opsPerSecondPerClientCi95Half = opsPerSecondPerClientCi95Half;
             this.avgWaitTimeMs = avgWaitTimeMs;
             this.avgHoldTimeMs = avgHoldTimeMs;
             this.totalCorrectnessViolations = totalCorrectnessViolations;
@@ -86,6 +91,9 @@ public class BenchmarkResultsAggregator {
         long violations = results.stream().mapToLong(BenchmarkResult::getCorrectnessViolations).sum();
         long fifoViols = results.stream().mapToLong(BenchmarkResult::getFifoViolations).sum();
 
+        double stdev = sampleStdev(results, avgOps);
+        double ci95Half = clientCount > 1 ? 1.96 * stdev / Math.sqrt(clientCount) : 0.0;
+
         // Aggregate latency percentiles (average across clients)
         Map<String, Long> aggregatedPercentiles = aggregatePercentiles(results);
 
@@ -93,7 +101,40 @@ public class BenchmarkResultsAggregator {
             implType, clientCount, String.format("%.2f", totalOps), violations);
 
         return new AggregatedResult(implType, clientCount, totalSuccessful, totalFailed,
-            totalOps, avgOps, avgWait, avgHold, violations, fifoViols, aggregatedPercentiles, validationResult);
+            totalOps, avgOps, stdev, ci95Half, avgWait, avgHold, violations, fifoViols,
+            aggregatedPercentiles, validationResult);
+    }
+
+    private double sampleStdev(List<BenchmarkResult> results, double mean) {
+        int n = results.size();
+        if (n < 2) return 0.0;
+        double sumSq = 0;
+        for (BenchmarkResult r : results) {
+            double d = r.getOpsPerSecond() - mean;
+            sumSq += d * d;
+        }
+        return Math.sqrt(sumSq / (n - 1));
+    }
+
+    /**
+     * Aggregates results grouped by implementation type. Use when a single benchmark run produces
+     * multiple roles per implementation (e.g. RWLock readers and writers) that must be reported separately.
+     */
+    public List<AggregatedResult> aggregateByImplementationType(List<BenchmarkResult> results,
+            ValidationResult validationResult) {
+        if (results.isEmpty()) {
+            throw new IllegalArgumentException("No results to aggregate");
+        }
+
+        Map<String, List<BenchmarkResult>> grouped = results.stream()
+                .collect(Collectors.groupingBy(BenchmarkResult::getImplementationType,
+                        LinkedHashMap::new, Collectors.toList()));
+
+        List<AggregatedResult> aggregated = new ArrayList<>(grouped.size());
+        for (List<BenchmarkResult> group : grouped.values()) {
+            aggregated.add(aggregate(group, validationResult));
+        }
+        return aggregated;
     }
 
     /**
@@ -107,6 +148,8 @@ public class BenchmarkResultsAggregator {
                 result.getFailedLockAcquisitions(),
                 result.getOpsPerSecond(),
                 result.getOpsPerSecond(),
+                0.0,
+                0.0,
                 result.getAverageWaitTimeMs(),
                 result.getAverageHoldTimeMs(),
                 result.getCorrectnessViolations(),

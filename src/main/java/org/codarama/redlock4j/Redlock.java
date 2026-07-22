@@ -147,18 +147,20 @@ public class Redlock extends AbstractRedlock implements Lock {
             // Wait before retrying
             remaining = Duration.between(Instant.now(), deadline);
             if (!remaining.isNegative()) {
-                waitForLockReleaseWithJitter(remaining);
+                waitForLockReleaseWithJitter(remaining, attempt);
             }
             attempt++;
         }
     }
 
     /**
-     * Waits for the lock to be released with added jitter for backward compatibility.
+     * Waits for the lock to be released. Uses the configured wait strategy when present (which applies its own
+     * exponential backoff if so configured) and otherwise falls back to a legacy random-jitter sleep based on
+     * {@code retryDelay} \u2014 preserved for backward compatibility for callers that do not set a wait strategy.
      */
-    private void waitForLockReleaseWithJitter(Duration remainingTimeout) throws InterruptedException {
+    private void waitForLockReleaseWithJitter(Duration remainingTimeout, int attempt) throws InterruptedException {
         if (waitStrategy != null) {
-            waitForLockRelease(lockKey, remainingTimeout.toMillis());
+            waitForLockRelease(lockKey, remainingTimeout.toMillis(), attempt);
         } else {
             // Fallback to simple sleep with jitter (backward compatibility for Redlock)
             long retryDelayMs = config.getRetryDelay().toMillis();

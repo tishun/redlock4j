@@ -25,11 +25,11 @@ public class MarkdownReportGenerator {
 
     private static final Logger logger = LoggerFactory.getLogger(MarkdownReportGenerator.class);
 
-    public String generate(BenchmarkConfiguration config, List<AggregatedResult> results) {
+    public String generate(String title, BenchmarkConfiguration config, List<AggregatedResult> results) {
         StringBuilder sb = new StringBuilder();
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-        sb.append("# Fair Lock Benchmark Results\n\n");
+        sb.append("# ").append(title).append(" Benchmark Results\n\n");
         sb.append("**Generated:** ").append(timestamp).append("\n\n");
 
         // Configuration Section
@@ -54,7 +54,9 @@ public class MarkdownReportGenerator {
         sb.append("\n");
 
         addRow(sb, "Total Ops/s", results, r -> String.format("%.2f", r.aggregateOpsPerSecond));
-        addRow(sb, "Avg Ops/s/Client", results, r -> String.format("%.2f", r.avgOpsPerSecondPerClient));
+        addRow(sb, "Avg Ops/s/Client (95% CI)", results, r -> r.clientCount > 1
+                ? String.format("%.2f \u00b1 %.2f", r.avgOpsPerSecondPerClient, r.opsPerSecondPerClientCi95Half)
+                : String.format("%.2f", r.avgOpsPerSecondPerClient));
         addRow(sb, "Successful Ops", results, r -> String.format("%,d", r.totalSuccessfulOps));
         addRow(sb, "Failed Ops", results, r -> String.format("%,d", r.totalFailedOps));
         addRow(sb, "Success Rate", results, r -> String.format("%.2f%%", r.getSuccessRate()));

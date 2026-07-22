@@ -32,12 +32,23 @@ public abstract class AbstractReadWriteLockClient implements ReadWriteLockBenchm
         ReadWriteLock rwLock = getReadWriteLock("benchmark-rwlock");
         Lock lock = isWriter ? rwLock.writeLock() : rwLock.readLock();
 
-        long endTime = System.currentTimeMillis() + config.getBenchmarkDuration().toMillis();
+        long now = System.currentTimeMillis();
+        long warmupEnd = now + config.getWarmupDuration().toMillis();
+        long endTime = warmupEnd + config.getBenchmarkDuration().toMillis();
         long workTimeNanos = config.getWorkSimulationTime().toNanos();
+        boolean inWarmup = config.getWarmupDuration().toMillis() > 0;
 
-        logger.info("Client {} ({}) starting as {}", clientId, getImplementationType(), role);
+        logger.info("Client {} ({}) starting as {} (warmup {}s + measure {}s)",
+                clientId, getImplementationType(), role,
+                config.getWarmupDuration().getSeconds(), config.getBenchmarkDuration().getSeconds());
 
         while (System.currentTimeMillis() < endTime && !Thread.currentThread().isInterrupted()) {
+            if (inWarmup && System.currentTimeMillis() >= warmupEnd) {
+                inWarmup = false;
+                waitTimes.clear();
+                result.reset();
+                logger.info("Client {} warmup complete, beginning measurement", clientId);
+            }
             long waitStartNanos = System.nanoTime();
             boolean acquired = false;
 

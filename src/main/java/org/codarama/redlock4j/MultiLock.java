@@ -194,7 +194,7 @@ public class MultiLock extends AbstractRedlock implements Lock {
             remaining = Duration.between(Instant.now(), deadline);
             if (!remaining.isNegative()) {
                 // Wait on the first lock key (any release might allow us to proceed)
-                waitForLockRelease(lockKeys.get(0), remaining.toMillis());
+                waitForLockRelease(lockKeys.get(0), remaining.toMillis(), attempt);
             }
             attempt++;
         }

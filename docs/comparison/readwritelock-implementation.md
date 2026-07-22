@@ -15,9 +15,7 @@ Both libraries implement distributed read-write locks to allow multiple concurre
 **Use Case**: Scenarios requiring strong consistency for read-heavy workloads
 
 ```java
-RedlockReadWriteLock rwLock = new RedlockReadWriteLock(
-    "resource", redisDrivers, config
-);
+RedlockReadWriteLock rwLock = manager.createReadWriteLock("resource");
 
 // Multiple readers can acquire simultaneously
 rwLock.readLock().lock();
@@ -139,16 +137,46 @@ RedissonReadWriteLock
 **Algorithm**: Check write lock, then increment reader count
 
 ```java
-public boolean tryLock(long time, TimeUnit unit) {
-    // 1. Check reentrancy
+public boolean tryLock(Duration timeout) throws InterruptedException {
+    // 1. Check reentrancy (thread-local state)
     LockState currentState = lockState.get();
     if (currentState != null && currentState.isValid()) {
         currentState.incrementHoldCount();
         return true;
     }
 
-    // 2. Retry loop
+    Instant deadline = Instant.now().plus(timeout);
 
+    // 2. Retry loop
+    for (int attempt = 0; attempt <= config.getMaxRetryAttempts(); attempt++) {
+        // 3. Only proceed when no writer holds the lock
+        if (!isWriteLockHeld()) {
+            String lockValue = generateLockValue();
+            // 4. Increment the reader count (quorum-based via the strategy)
+            if (incrementReaderCount(lockValue)) {
+                lockState.set(new LockState(lockValue, Instant.now(),
+                                            config.getDefaultLockTimeout()));
+                return true;
+            }
+        }
+
+        // 5. Stop once the timeout is exhausted, otherwise wait and retry
+        Duration remaining = Duration.between(Instant.now(), deadline);
+        if (!timeout.isZero() && remaining.isNegative()) {
+            break;
+        }
+        waitForLockRelease(remaining.toMillis(), attempt);
+    }
+
+    return false;
+}
+```
+
+**Flow**:
+1. Check thread-local reentrancy
+2. Poll until no writer holds the lock
+3. Increment the reader count (quorum-based)
+4. Track validity in thread-local state
 
 ### Redisson
 
@@ -212,17 +240,15 @@ public boolean tryLock(long time, TimeUnit unit) {
 }
 
 private boolean hasActiveReaders() {
-    int nodesWithoutReaders = 0;
-
-    for (RedisDriver driver : redisDrivers) {
+    // The execution strategy fans out to the nodes; a node "votes" when it
+    // reports no active readers.
+    int nodesWithoutReaders = executionStrategy.executeOnNodes(driver -> {
         String countStr = driver.get(readCountKey);
-        if (countStr == null || Long.parseLong(countStr) <= 0) {
-            nodesWithoutReaders++;
-        }
-    }
+        return countStr == null || Long.parseLong(countStr) <= 0;
+    });
 
-    // Quorum of nodes must have no readers
-    return nodesWithoutReaders < quorum;
+    // Readers are considered gone once a quorum of nodes report none
+    return !executionStrategy.isSuccessful(nodesWithoutReaders);
 }
 ```
 
@@ -309,7 +335,8 @@ public void unlock() {
 }
 
 private void decrementReaderCount(String lockValue) {
-    for (RedisDriver driver : redisDrivers) {
+    // Fan out to the appropriate nodes via the execution strategy
+    executionStrategy.executeOnNodes(driver -> {
         // Decrement counter
         long count = driver.decr(readCountKey);
 
@@ -320,7 +347,8 @@ private void decrementReaderCount(String lockValue) {
         if (count <= 0) {
             driver.del(readCountKey);
         }
-    }
+        return true;
+    });
 }
 ```
 
@@ -538,23 +566,48 @@ Writer 1: still waiting...
 - Single round trip
 - Pub/sub notification overhead
 
+### Measured Performance
+
+Benchmark: 10 clients (8 readers + 2 writers), 50 ms work per cycle, 3-node Redis 7 cluster, 60 s measurement (full methodology in [Architecture › Performance Analysis](../guide/architecture.md#performance-analysis)).
+
+**Readers**:
+
+| Implementation                |       Ops/s |    p50 (ms) |    p99 (ms) |  mean (ms) |  success |
+|-------------------------------|------------:|------------:|------------:|-----------:|---------:|
+| **Redisson reader**           |  **151.65** |    **0.79** |    **5.82** |   **1.32** |    100 % |
+| redlock4j-3node reader        |       95.41 |        2.72 |       348.4 |       30.4 |    100 % |
+| redlock4j-singlenode reader   |       74.66 |       12.54 |       340.6 |       54.2 |    100 % |
+
+**Writers**:
+
+| Implementation                |      Ops/s |  p50 (ms) |  p99 (ms) |  mean (ms) |  success |
+|-------------------------------|-----------:|----------:|----------:|-----------:|---------:|
+| Redisson writer               |       0.21 |     8,649 |    16,821 |      9,680 |    100 % |
+| redlock4j-singlenode writer   |      15.63 |      57.8 |     755.6 |       72.4 |    100 % |
+| **redlock4j-3node writer**    |  **16.42** |  **64.1** | **104.2** |   **63.5** |    100 % |
+
+**Reading the numbers**:
+
+- **Readers**: Redisson wins decisively. Its reader implementation tracks active readers via an in-process semaphore counter and only hits Redis on the transition; redlock4j hits Redis on every read acquire. This is an architectural choice, not a regression — the trade-off is that Redisson's reader count is local to one JVM while redlock4j's is distributed.
+- **Writers**: redlock4j wins decisively on both throughput and tail latency. Redisson exhibits writer starvation under reader load (p99 = 16.8 s); redlock4j's 3-node mode keeps writer p99 under 105 ms thanks to the parallel multi-node acquire path.
+
 ## Safety & Correctness
 
 ### redlock4j
 
 **Safety Guarantees**:
-- ✅ Quorum-based consistency
-- ✅ Survives minority node failures
-- ✅ Multiple readers guaranteed
-- ✅ Exclusive writer guaranteed
-- ✅ No single point of failure
+- Quorum-based consistency
+- Survives minority node failures
+- Multiple readers guaranteed
+- Exclusive writer guaranteed
+- No single point of failure
 
 **Potential Issues**:
-- ⚠️ Higher latency
-- ⚠️ More network overhead
-- ⚠️ Polling-based (no notifications)
-- ⚠️ Potential writer starvation
-- ⚠️ No lock upgrade/downgrade
+- Higher latency
+- More network overhead
+- Polling-based (no notifications)
+- Potential writer starvation
+- No lock upgrade/downgrade
 
 **Consistency Model**:
 ```
@@ -570,18 +623,18 @@ Write lock acquired if:
 ### Redisson
 
 **Safety Guarantees**:
-- ✅ Atomic operations (Lua scripts)
-- ✅ Multiple readers guaranteed
-- ✅ Exclusive writer guaranteed
-- ✅ Lock upgrade/downgrade support
-- ✅ Pub/sub notifications
-- ✅ Async/reactive support
+- Atomic operations (Lua scripts)
+- Multiple readers guaranteed
+- Exclusive writer guaranteed
+- Lock upgrade/downgrade support
+- Pub/sub notifications
+- Async/reactive support
 
 **Potential Issues**:
-- ⚠️ Single point of failure
-- ⚠️ No quorum mechanism
-- ⚠️ Potential writer starvation (non-fair)
-- ⚠️ More complex Lua scripts
+- Single point of failure
+- No quorum mechanism
+- Potential writer starvation (non-fair)
+- More complex Lua scripts
 
 **Consistency Model**:
 ```
@@ -605,14 +658,10 @@ Lock acquired if:
 **Example Scenarios**:
 ```java
 // Distributed cache with strong consistency
-RedlockReadWriteLock cacheLock = new RedlockReadWriteLock(
-    "cache:users", redisDrivers, config
-);
+RedlockReadWriteLock cacheLock = manager.createReadWriteLock("cache:users");
 
 // Configuration management
-RedlockReadWriteLock configLock = new RedlockReadWriteLock(
-    "config:app", redisDrivers, config
-);
+RedlockReadWriteLock configLock = manager.createReadWriteLock("config:app");
 ```
 
 ### Redisson RedissonReadWriteLock
@@ -650,40 +699,40 @@ try {
 
 ## Feature Comparison Table
 
-| Feature | redlock4j | Redisson |
-|---------|-----------|----------|
-| **Data Model** | Counter + individual keys | Hash with mode field |
-| **Quorum** | Yes | No |
-| **Fault Tolerance** | Survives minority failures | Single point of failure |
-| **Lock Upgrade** | No | Yes (single reader only) |
-| **Lock Downgrade** | No | Yes |
-| **Waiting Mechanism** | Polling | Pub/sub |
-| **Fairness** | Non-fair | Non-fair (fair variant available) |
-| **Async Support** | No | Yes |
-| **Reactive Support** | No | Yes |
-| **Performance** | O(M) reads, O(N×M) writes | O(1) |
-| **Latency** | Higher | Lower |
-| **Network Overhead** | High | Low |
-| **Atomicity** | Quorum-based | Lua scripts |
+| Feature               | redlock4j                  | Redisson                          |
+|-----------------------|----------------------------|-----------------------------------|
+| **Data Model**        | Counter + individual keys  | Hash with mode field              |
+| **Quorum**            | Yes                        | No                                |
+| **Fault Tolerance**   | Survives minority failures | Single point of failure           |
+| **Lock Upgrade**      | No                         | Yes (single reader only)          |
+| **Lock Downgrade**    | No                         | Yes                               |
+| **Waiting Mechanism** | Polling                    | Pub/sub                           |
+| **Fairness**          | Non-fair                   | Non-fair (fair variant available) |
+| **Async Support**     | No                         | Yes                               |
+| **Reactive Support**  | No                         | Yes                               |
+| **Performance**       | O(M) reads, O(N×M) writes  | O(1)                              |
+| **Latency**           | Higher                     | Lower                             |
+| **Network Overhead**  | High                       | Low                               |
+| **Atomicity**         | Quorum-based               | Lua scripts                       |
 
 ## Recommendations
 
 ### Choose redlock4j RedlockReadWriteLock when:
 
-- ✅ Need quorum-based distributed consistency
-- ✅ Require fault tolerance (multi-master)
-- ✅ Read-heavy workloads with strong consistency
-- ✅ Can tolerate higher latency
-- ✅ Don't need lock upgrade/downgrade
+- Need quorum-based distributed consistency
+- Require fault tolerance (multi-master)
+- Read-heavy workloads with strong consistency
+- Can tolerate higher latency
+- Don't need lock upgrade/downgrade
 
 ### Choose Redisson RedissonReadWriteLock when:
 
-- ✅ Single Redis instance is acceptable
-- ✅ Need high throughput / low latency
-- ✅ Require lock upgrade/downgrade
-- ✅ Need async/reactive APIs
-- ✅ Want pub/sub notifications
-- ✅ Need fair ordering (use RedissonFairReadWriteLock)
+- Single Redis instance is acceptable
+- Need high throughput / low latency
+- Require lock upgrade/downgrade
+- Need async/reactive APIs
+- Want pub/sub notifications
+- Need fair ordering (use RedissonFairReadWriteLock)
 
 ## Conclusion
 

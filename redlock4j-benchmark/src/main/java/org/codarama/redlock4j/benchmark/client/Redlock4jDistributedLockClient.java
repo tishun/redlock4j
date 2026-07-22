@@ -36,6 +36,9 @@ public class Redlock4jDistributedLockClient extends AbstractDistributedLockClien
                 .defaultLockTimeout(config.getLockTimeout())
                 .lockAcquisitionTimeout(config.getLockAcquisitionTimeout())
                 .retryDelay(Duration.ofMillis(50))
+                .maxRetryDelay(Duration.ofMillis(500))
+                .retryDelayMultiplier(2.0)
+                .retryDelayJitterRatio(0.5)
                 .maxRetryAttempts(100);
 
         for (RedisClusterManager.RedisNodeInfo node : nodes) {

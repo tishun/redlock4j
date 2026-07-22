@@ -51,11 +51,11 @@ public final class LockExecutionStrategyFactory {
         }
 
         if (drivers.size() == 1) {
-            logger.info("Using SingleNodeStrategy - optimized for single Redis instance");
+            logger.debug("Using SingleNodeStrategy - optimized for single Redis instance");
             return new SingleNodeStrategy(drivers.get(0));
         }
 
-        logger.info("Using MultiNodeStrategy with {} nodes, quorum={}", drivers.size(), config.getQuorum());
+        logger.debug("Using MultiNodeStrategy with {} nodes, quorum={}", drivers.size(), config.getQuorum());
         return new MultiNodeStrategy(drivers, config);
     }
 }

@@ -36,9 +36,6 @@ jobs:
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
         
-    - name: Run unit tests
-      run: mvn test
-
     - name: Run integration tests
       run: mvn verify -Dmaven.test.skip.exec=false
       env:

@@ -81,14 +81,14 @@ redis.call('zrem', KEYS[3], ARGV[2])
 - **Clock Dependency**: Relies on reasonably synchronized clocks
 
 ```java
-int votesForFront = 0;
-for (RedisDriver driver : redisDrivers) {
+// The execution strategy fans out to the appropriate nodes and applies the
+// quorum rule; a node "votes" for the token if it is at the front of that
+// node's queue.
+int votesForFront = executionStrategy.executeOnNodes(driver -> {
     List<String> firstElements = driver.zRange(queueKey, 0, 0);
-    if (!firstElements.isEmpty() && token.equals(firstElements.get(0))) {
-        votesForFront++;
-    }
-}
-return votesForFront >= config.getQuorum();
+    return !firstElements.isEmpty() && token.equals(firstElements.get(0));
+});
+return executionStrategy.isSuccessful(votesForFront);
 ```
 
 ### Redisson
@@ -119,14 +119,15 @@ end
 
 ```java
 private void addToQueue(String token, long timestamp) {
-    // Add to queue
-    for (RedisDriver driver : redisDrivers) {
+    // Add to queue on the appropriate nodes via the execution strategy
+    executionStrategy.executeOnNodes(driver -> {
         driver.zAdd(queueKey, timestamp, token);
-    }
+        return true;
+    });
 
-    // Cleanup expired entries
-    long expirationThreshold = System.currentTimeMillis()
-        - config.getDefaultLockTimeoutMs() * 2;
+    // Cleanup expired entries (older than 2x the lock timeout)
+    Duration expirationAge = config.getDefaultLockTimeout().multipliedBy(2);
+    long expirationThreshold = System.currentTimeMillis() - expirationAge.toMillis();
     cleanupExpiredQueueEntries(expirationThreshold);
 }
 ```
@@ -373,35 +374,35 @@ end
 **Lines of Code**: ~390 lines
 
 **Pros**:
-- ✅ Simpler to understand
-- ✅ Single data structure (sorted set)
-- ✅ Fewer Redis operations
-- ✅ Less state to manage
-- ✅ Timestamp-based ordering is intuitive
+- Simpler to understand
+- Single data structure (sorted set)
+- Fewer Redis operations
+- Less state to manage
+- Timestamp-based ordering is intuitive
 
 **Cons**:
-- ❌ Clock skew sensitivity
-- ❌ Polling-based (no notifications)
-- ❌ Cleanup only on addToQueue
-- ❌ Less sophisticated timeout handling
+- Clock skew sensitivity
+- Polling-based (no notifications)
+- Cleanup only on addToQueue
+- Less sophisticated timeout handling
 
 ### Redisson
 
 **Lines of Code**: ~350 lines (but denser Lua scripts)
 
 **Pros**:
-- ✅ Robust stale thread handling
-- ✅ Better timeout estimation
-- ✅ Explicit thread notification (pub/sub)
-- ✅ Less clock-dependent (list ordering)
-- ✅ Production-hardened
+- Robust stale thread handling
+- Better timeout estimation
+- Explicit thread notification (pub/sub)
+- Less clock-dependent (list ordering)
+- Production-hardened
 
 **Cons**:
-- ❌ More complex implementation
-- ❌ Two data structures to maintain
-- ❌ More Redis operations per attempt
-- ❌ Cleanup overhead on every operation
-- ❌ Requires pub/sub infrastructure
+- More complex implementation
+- Two data structures to maintain
+- More Redis operations per attempt
+- Cleanup overhead on every operation
+- Requires pub/sub infrastructure
 
 ## Performance Comparison
 
@@ -435,6 +436,19 @@ end
   - Pub/sub notification
 
 **Total**: Fewer round trips, but heavier Lua scripts
+
+### Measured Performance
+
+Benchmark: 5 clients, 50 ms work per cycle, 3-node Redis 7 cluster, 60 s measurement (full methodology in [Architecture › Performance Analysis](../guide/architecture.md#performance-analysis)).
+
+| Implementation            |      Ops/s | p50 (ms) | p99 (ms) | mean (ms) | success |
+|---------------------------|-----------:|---------:|---------:|----------:|--------:|
+| **Redisson**              |  **16.99** |  **221** |  **230** |       248 |   100 % |
+| redlock4j-singlenode      |      12.42 |      332 |      435 |       349 |   100 % |
+| redlock4j-3node (Jedis)   |       2.95 |    1,666 |    2,457 |     1,642 |   100 % |
+| redlock4j-3node (Lettuce) |       2.87 |    1,667 |    2,549 |     1,685 |   100 % |
+
+**Reading the numbers**: Redisson leads on both throughput and p99 in single-node mode because its atomic Lua scripts collapse the queue-check + acquire into one round trip. redlock4j's 3-node mode is throughput-limited by the per-attempt quorum head-check (`ZRANGE` on every node). The structural fix is tracked as P2-8 (single-shot atomic head-check + acquire) in `redlock4j-benchmark/benchmark-analysis.md` §8. Note: FairLock deliberately uses fixed-interval polling — exponential backoff hurts FairLock because head-of-queue waiters must claim the lock the instant the holder releases.
 
 ## Edge Cases & Robustness
 
@@ -529,8 +543,8 @@ private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
 private static class LockState {
     final String lockValue;
     final String queueToken;
-    final long acquisitionTime;
-    final long validityTime;
+    final Instant acquisitionTime;
+    final Duration validityDuration;
     int holdCount;
 }
 

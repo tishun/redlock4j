@@ -75,7 +75,7 @@ public class DistributedLockBenchmarkMain {
         }
 
         MarkdownReportGenerator reportGenerator = new MarkdownReportGenerator();
-        String report = reportGenerator.generate(config, allResults);
+        String report = reportGenerator.generate("Distributed Lock", config, allResults);
 
         Path outputPath = Paths.get("distributed-lock-benchmark-results.md");
         try {
@@ -85,6 +85,15 @@ public class DistributedLockBenchmarkMain {
         } catch (Exception e) {
             logger.error("Failed to write report: {}", e.getMessage());
             System.out.println(report);
+        }
+
+        JsonReportGenerator jsonGenerator = new JsonReportGenerator();
+        String json = jsonGenerator.generate("Distributed Lock", config, allResults);
+        Path jsonOutputPath = Paths.get("distributed-lock-benchmark-results.json");
+        try {
+            jsonGenerator.writeToFile(json, jsonOutputPath);
+        } catch (Exception e) {
+            logger.error("Failed to write JSON report: {}", e.getMessage());
         }
 
         System.out.println("\n" + report);

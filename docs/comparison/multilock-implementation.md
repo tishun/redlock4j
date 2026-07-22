@@ -15,10 +15,8 @@ Both libraries implement multi-lock functionality to atomically acquire multiple
 **Use Case**: When you need to lock multiple resources simultaneously (e.g., transferring between multiple bank accounts)
 
 ```java
-MultiLock multiLock = new MultiLock(
-    Arrays.asList("account:1", "account:2", "account:3"),
-    redisDrivers,
-    config
+Lock multiLock = manager.createMultiLock(
+    Arrays.asList("account:1", "account:2", "account:3")
 );
 multiLock.lock();
 try {
@@ -65,7 +63,7 @@ try {
 ```
 MultiLock
   ├─ List<String> lockKeys (sorted)
-  ├─ List<RedisDriver> redisDrivers (shared cluster)
+  ├─ LockExecutionStrategy (node fan-out + quorum)
   ├─ Quorum-based acquisition per resource
   └─ Thread-local state tracking
 ```
@@ -147,16 +145,16 @@ private MultiLockResult attemptMultiLock() {
         lockValues.put(key, generateLockValue());
     }
 
-    // 2. Try to acquire ALL locks on EACH Redis node
-    int successfulNodes = 0;
-    for (RedisDriver driver : redisDrivers) {
-        if (acquireAllOnNode(driver, lockValues)) {
-            successfulNodes++;
-        }
-    }
+    // 2. Try to acquire ALL locks on EACH Redis node.
+    //    The execution strategy fans out to the nodes and returns how many
+    //    succeeded.
+    int successfulNodes = executionStrategy.executeOnNodes(
+        driver -> acquireAllOnNode(driver, lockValues));
 
-    // 3. Check quorum and validity
-    boolean acquired = successfulNodes >= config.getQuorum()
+    // 3. Check quorum (via the strategy) and validity
+    long validityTime = executionStrategy.calculateValidityTime(
+        config.getDefaultLockTimeout().toMillis(), startTime);
+    boolean acquired = executionStrategy.isSuccessful(successfulNodes)
                     && validityTime > 0;
 
     // 4. Rollback if failed
@@ -357,8 +355,8 @@ private final ThreadLocal<LockState> lockState = new ThreadLocal<>();
 
 private static class LockState {
     final Map<String, String> lockValues; // All lock values
-    final long acquisitionTime;
-    final long validityTime;
+    final Instant acquisitionTime;
+    final Duration validityDuration;
     int holdCount;
 }
 
@@ -423,11 +421,12 @@ long startTime = System.currentTimeMillis();
 
 // Acquire all locks...
 
-long elapsedTime = System.currentTimeMillis() - startTime;
-long driftTime = (long) (config.getDefaultLockTimeoutMs() * config.getClockDriftFactor()) + 2;
-long validityTime = config.getDefaultLockTimeoutMs() - elapsedTime - driftTime;
+// The execution strategy computes the remaining validity, applying clock-drift
+// compensation to the configured lock timeout (a Duration).
+long validityTime = executionStrategy.calculateValidityTime(
+    config.getDefaultLockTimeout().toMillis(), startTime);
 
-boolean acquired = successfulNodes >= config.getQuorum() && validityTime > 0;
+boolean acquired = executionStrategy.isSuccessful(successfulNodes) && validityTime > 0;
 ```
 
 **Characteristics**:
@@ -508,6 +507,17 @@ Attempt 2:
 Total: Variable, sequential
 ```
 
+### Measured Performance
+
+Benchmark: 5 clients, 5 resources per MultiLock, 50 ms work per cycle, 3-node Redis 7 cluster, 60 s measurement (full methodology in [Architecture › Performance Analysis](../guide/architecture.md#performance-analysis)).
+
+| Implementation         |      Ops/s |   p50 (ms) |    p99 (ms) |  mean (ms) |  success |
+|------------------------|-----------:|-----------:|------------:|-----------:|---------:|
+| Redisson               |      17.05 |      190.2 |     1,192.2 |      272.9 |    100 % |
+| redlock4j-singlenode   |      16.97 |      202.9 |     1,709.5 |      303.0 |    100 % |
+| **redlock4j-3node**    |  **17.72** |  **171.0** | **1,057.6** |  **237.4** |    100 % |
+
+**Reading the numbers**: `redlock4j-3node` leads on throughput, p50, p99, and mean — the only primitive where the 3-node Redlock variant beats every single-node implementation in the field. The parallel multi-node I/O (each `SET NX` for all 5 resources fans out across all 3 nodes simultaneously) is what makes this possible.
 
 ## Use Case Differences
 
@@ -522,15 +532,13 @@ Total: Variable, sequential
 **Example Scenarios**:
 ```java
 // Bank transfer between multiple accounts
-MultiLock lock = new MultiLock(
-    Arrays.asList("account:1", "account:2", "account:3"),
-    redisDrivers, config
+Lock lock = manager.createMultiLock(
+    Arrays.asList("account:1", "account:2", "account:3")
 );
 
 // Inventory management across warehouses
-MultiLock lock = new MultiLock(
-    Arrays.asList("warehouse:A:item:123", "warehouse:B:item:123"),
-    redisDrivers, config
+Lock lock = manager.createMultiLock(
+    Arrays.asList("warehouse:A:item:123", "warehouse:B:item:123")
 );
 ```
 
@@ -561,30 +569,30 @@ RedissonMultiLock multiLock = new RedissonMultiLock(fairLock, readLock);
 ### redlock4j
 
 **Safety Guarantees**:
-- ✅ Deadlock-free (automatic key sorting)
-- ✅ Quorum-based consistency
-- ✅ All-or-nothing atomicity
-- ✅ Clock drift compensation
-- ✅ Validity time enforcement
+- Deadlock-free (automatic key sorting)
+- Quorum-based consistency
+- All-or-nothing atomicity
+- Clock drift compensation
+- Validity time enforcement
 
 **Potential Issues**:
-- ⚠️ All resources must be on same Redis cluster
-- ⚠️ Higher latency due to quorum requirement
-- ⚠️ More network overhead (N×M operations)
+- All resources must be on same Redis cluster
+- Higher latency due to quorum requirement
+- More network overhead (N×M operations)
 
 ### Redisson
 
 **Safety Guarantees**:
-- ✅ Flexible lock composition
-- ✅ Works across different Redis instances
-- ✅ Extensible failure tolerance
-- ✅ Async/reactive support
+- Flexible lock composition
+- Works across different Redis instances
+- Extensible failure tolerance
+- Async/reactive support
 
 **Potential Issues**:
-- ⚠️ No automatic deadlock prevention
-- ⚠️ Developer must ensure lock ordering
-- ⚠️ Sequential acquisition (slower for many locks)
-- ⚠️ No quorum mechanism by default
+- No automatic deadlock prevention
+- Developer must ensure lock ordering
+- Sequential acquisition (slower for many locks)
+- No quorum mechanism by default
 
 ## Complexity Analysis
 
@@ -593,34 +601,34 @@ RedissonMultiLock multiLock = new RedissonMultiLock(fairLock, readLock);
 **Code Complexity**: ~370 lines
 
 **Pros**:
-- ✅ Integrated Redlock implementation
-- ✅ Automatic deadlock prevention
-- ✅ Clear all-or-nothing semantics
-- ✅ Single validity time
-- ✅ Thread-local state (fast reentrancy)
+- Integrated Redlock implementation
+- Automatic deadlock prevention
+- Clear all-or-nothing semantics
+- Single validity time
+- Thread-local state (fast reentrancy)
 
 **Cons**:
-- ❌ Limited to single Redis cluster
-- ❌ More Redis operations
-- ❌ Higher network overhead
-- ❌ Less flexible composition
+- Limited to single Redis cluster
+- More Redis operations
+- Higher network overhead
+- Less flexible composition
 
 ### Redisson
 
 **Code Complexity**: ~450 lines (with async support)
 
 **Pros**:
-- ✅ Works across multiple Redis instances
-- ✅ Flexible lock composition
-- ✅ Extensible (can override failedLocksLimit)
-- ✅ Async/reactive support
-- ✅ Can mix different lock types
+- Works across multiple Redis instances
+- Flexible lock composition
+- Extensible (can override failedLocksLimit)
+- Async/reactive support
+- Can mix different lock types
 
 **Cons**:
-- ❌ No deadlock prevention
-- ❌ Sequential acquisition
-- ❌ More complex retry logic
-- ❌ Requires careful lock ordering
+- No deadlock prevention
+- Sequential acquisition
+- More complex retry logic
+- Requires careful lock ordering
 
 ## RedissonRedLock vs redlock4j MultiLock
 
@@ -646,38 +654,38 @@ public class RedissonRedLock extends RedissonMultiLock {
 
 **Comparison with redlock4j MultiLock**:
 
-| Feature | redlock4j MultiLock | RedissonRedLock |
-|---------|---------------------|-----------------|
-| **Purpose** | Multiple resources on same cluster | Multiple independent Redis instances |
-| **Quorum** | Per-resource across nodes | Across different locks |
-| **Deadlock Prevention** | Automatic (sorted keys) | Manual (developer responsibility) |
-| **Acquisition** | Parallel per node | Sequential across locks |
-| **Use Case** | Multi-resource locking | Multi-instance Redlock |
+| Feature                 | redlock4j MultiLock                | RedissonRedLock                      |
+|-------------------------|------------------------------------|--------------------------------------|
+| **Purpose**             | Multiple resources on same cluster | Multiple independent Redis instances |
+| **Quorum**              | Per-resource across nodes          | Across different locks               |
+| **Deadlock Prevention** | Automatic (sorted keys)            | Manual (developer responsibility)    |
+| **Acquisition**         | Parallel per node                  | Sequential across locks              |
+| **Use Case**            | Multi-resource locking             | Multi-instance Redlock               |
 
 ## Recommendations
 
 ### Choose redlock4j MultiLock when:
 
-- ✅ Locking multiple resources on the same Redis cluster
-- ✅ Need automatic deadlock prevention
-- ✅ Require strict all-or-nothing semantics
-- ✅ Want quorum-based safety per resource
-- ✅ Prefer simpler, integrated solution
+- Locking multiple resources on the same Redis cluster
+- Need automatic deadlock prevention
+- Require strict all-or-nothing semantics
+- Want quorum-based safety per resource
+- Prefer simpler, integrated solution
 
 ### Choose Redisson RedissonMultiLock when:
 
-- ✅ Need to coordinate locks across different Redis instances
-- ✅ Want to compose different lock types
-- ✅ Require async/reactive support
-- ✅ Can manage lock ordering manually
-- ✅ Need flexible failure tolerance
+- Need to coordinate locks across different Redis instances
+- Want to compose different lock types
+- Require async/reactive support
+- Can manage lock ordering manually
+- Need flexible failure tolerance
 
 ### Choose Redisson RedissonRedLock when:
 
-- ✅ Implementing Redlock across multiple Redis instances
-- ✅ Each lock represents a different Redis master
-- ✅ Need quorum-based distributed locking
-- ✅ Can ensure proper lock ordering
+- Implementing Redlock across multiple Redis instances
+- Each lock represents a different Redis master
+- Need quorum-based distributed locking
+- Can ensure proper lock ordering
 
 ## Migration Considerations
 
@@ -697,10 +705,8 @@ try {
 }
 
 // After (redlock4j)
-MultiLock multiLock = new MultiLock(
-    Arrays.asList("account:1", "account:2", "account:3"),
-    redisDrivers,
-    config
+Lock multiLock = manager.createMultiLock(
+    Arrays.asList("account:1", "account:2", "account:3")
 );
 multiLock.lock();
 try {
@@ -723,10 +729,8 @@ try {
 
 ```java
 // Before (redlock4j)
-MultiLock multiLock = new MultiLock(
-    Arrays.asList("resource1", "resource2", "resource3"),
-    redisDrivers,
-    config
+Lock multiLock = manager.createMultiLock(
+    Arrays.asList("resource1", "resource2", "resource3")
 );
 
 // After (Redisson) - if using multiple instances
@@ -772,42 +776,4 @@ Choose based on your specific requirements:
 - **Same cluster, multiple resources** → redlock4j MultiLock
 - **Multiple instances, flexible composition** → Redisson RedissonMultiLock
 - **Multiple instances, Redlock algorithm** → Redisson RedissonRedLock
-    boolean acquired = successfulNodes >= config.getQuorum()
-                    && validityTime > 0;
-
-    // 4. Rollback if failed
-    if (!acquired) {
-        releaseAllLocks(lockValues);
-    }
-
-    return new MultiLockResult(acquired, validityTime, lockValues, ...);
-}
-```
-
-**Per-Node Acquisition**:
-```java
-private boolean acquireAllOnNode(RedisDriver driver, Map<String, String> lockValues) {
-    List<String> acquiredKeys = new ArrayList<>();
-
-    for (String key : lockKeys) {
-        if (driver.setIfNotExists(key, lockValue, timeout)) {
-            acquiredKeys.add(key);
-        } else {
-            // Failed - rollback this node
-            rollbackOnNode(driver, lockValues, acquiredKeys);
-            return false;
-        }
-    }
-    return true;
-}
-```
-
-**Flow**:
-1. Generate unique lock values for all keys
-2. For each Redis node:
-   - Try to acquire ALL locks
-   - If any fails, rollback that node
-3. Check if quorum achieved
-4. If not, release all acquired locks
-
 

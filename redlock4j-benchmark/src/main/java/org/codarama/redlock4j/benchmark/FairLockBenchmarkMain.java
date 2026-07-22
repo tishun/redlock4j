@@ -68,9 +68,9 @@ public class FairLockBenchmarkMain {
 
         // Generate and write report
         MarkdownReportGenerator reportGenerator = new MarkdownReportGenerator();
-        String report = reportGenerator.generate(config, allResults);
+        String report = reportGenerator.generate("Fair Lock", config, allResults);
 
-        Path outputPath = Paths.get("benchmark-results.md");
+        Path outputPath = Paths.get("fairlock-benchmark-results.md");
         try {
             reportGenerator.writeToFile(report, outputPath);
             logger.info("\n========== BENCHMARK COMPLETE ==========");
@@ -78,6 +78,15 @@ public class FairLockBenchmarkMain {
         } catch (Exception e) {
             logger.error("Failed to write report: {}", e.getMessage());
             System.out.println(report); // Print to console as fallback
+        }
+
+        JsonReportGenerator jsonGenerator = new JsonReportGenerator();
+        String json = jsonGenerator.generate("Fair Lock", config, allResults);
+        Path jsonOutputPath = Paths.get("fairlock-benchmark-results.json");
+        try {
+            jsonGenerator.writeToFile(json, jsonOutputPath);
+        } catch (Exception e) {
+            logger.error("Failed to write JSON report: {}", e.getMessage());
         }
 
         // Print summary to console

@@ -1,0 +1,144 @@
+{
+  "title" : "Fair Lock",
+  "generatedAt" : "2026-06-16T09:54:43.360706Z",
+  "config" : {
+    "redisNodeCount" : 3,
+    "clientCount" : 5,
+    "benchmarkDurationMs" : 60000,
+    "warmupDurationMs" : 30000,
+    "workSimulationTimeMs" : 50,
+    "lockTimeoutMs" : 30000,
+    "lockAcquisitionTimeoutMs" : 60000,
+    "lockResourceName" : "benchmark-fair-lock",
+    "multiLockResourceCount" : 5
+  },
+  "results" : [ {
+    "implementationType" : "redisson",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 1092,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 16.988580483052665,
+    "avgOpsPerSecondPerClient" : 3.397716096610533,
+    "opsPerSecondPerClientStdev" : 0.5414870847518041,
+    "opsPerSecondPerClientCi95Half" : 0.4746343567337436,
+    "avgWaitTimeMs" : 247.92411001411338,
+    "avgHoldTimeMs" : 50.00609954408697,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 229750,
+      "max" : 6194120,
+      "p90" : 223572,
+      "mean" : 247923,
+      "p50" : 220970,
+      "p999" : 6194120,
+      "p95" : 224687,
+      "p75" : 222141
+    },
+    "validation" : {
+      "totalEvents" : 1638,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-singlenode",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 745,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 12.420518096233051,
+    "avgOpsPerSecondPerClient" : 2.48410361924661,
+    "opsPerSecondPerClientStdev" : 8.14756010538522E-4,
+    "opsPerSecondPerClientCi95Half" : 7.141651312591428E-4,
+    "avgWaitTimeMs" : 348.637306271141,
+    "avgHoldTimeMs" : 50.00335468053691,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 434824,
+      "max" : 436999,
+      "p90" : 386150,
+      "mean" : 348636,
+      "p50" : 332021,
+      "p999" : 436999,
+      "p95" : 388930,
+      "p75" : 380775
+    },
+    "validation" : {
+      "totalEvents" : 1119,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-lettuce",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 172,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 2.8705231791322636,
+    "avgOpsPerSecondPerClient" : 0.5741046358264528,
+    "opsPerSecondPerClientStdev" : 0.0016749762459560196,
+    "opsPerSecondPerClientCi95Half" : 0.001468181412688786,
+    "avgWaitTimeMs" : 1685.3781698215128,
+    "avgHoldTimeMs" : 50.06018137327731,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 2549375,
+      "max" : 2549375,
+      "p90" : 2284444,
+      "mean" : 1685377,
+      "p50" : 1667216,
+      "p999" : 2549375,
+      "p95" : 2369874,
+      "p75" : 2009072
+    },
+    "validation" : {
+      "totalEvents" : 274,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  }, {
+    "implementationType" : "redlock4j-jedis",
+    "clientCount" : 5,
+    "totalSuccessfulOps" : 177,
+    "totalFailedOps" : 0,
+    "successRatePct" : 100.0,
+    "aggregateOpsPerSecond" : 2.946141807479366,
+    "avgOpsPerSecondPerClient" : 0.5892283614958732,
+    "opsPerSecondPerClientStdev" : 0.0018927743865635974,
+    "opsPerSecondPerClientCi95Half" : 0.0016590899002152538,
+    "avgWaitTimeMs" : 1641.699442889841,
+    "avgHoldTimeMs" : 50.00995677031746,
+    "totalCorrectnessViolations" : 0,
+    "totalFifoViolations" : 0,
+    "correct" : true,
+    "latencyPercentilesMicros" : {
+      "p99" : 2457072,
+      "max" : 2457072,
+      "p90" : 2113376,
+      "mean" : 1641698,
+      "p50" : 1666043,
+      "p999" : 2457072,
+      "p95" : 2363625,
+      "p75" : 1962217
+    },
+    "validation" : {
+      "totalEvents" : 269,
+      "uniqueClients" : 0,
+      "concurrentHolderViolations" : 0,
+      "fifoViolations" : 0,
+      "correct" : true
+    }
+  } ]
+}

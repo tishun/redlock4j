@@ -80,10 +80,8 @@ public class SemaphoreBenchmarkScenario {
                 });
             }
 
-            logger.info("Warmup phase: {} seconds", config.getWarmupDuration().getSeconds());
-            Thread.sleep(config.getWarmupDuration().toMillis());
-
-            logger.info("Starting benchmark...");
+            logger.info("Starting benchmark (warmup {}s + measure {}s, clients do warmup-discard internally)...",
+                    config.getWarmupDuration().getSeconds(), config.getBenchmarkDuration().getSeconds());
             long startTime = System.currentTimeMillis();
             startLatch.countDown();
 

@@ -1,6 +1,6 @@
-# Fair Lock Benchmark Results
+# Distributed Lock Benchmark Results
 
-**Generated:** 2026-04-22 00:45:16
+**Generated:** 2026-06-16 12:43:41
 
 ## Configuration
 
@@ -16,26 +16,26 @@
 
 | Metric | redisson | redlock4j-singlenode | redlock4j-3node | spring-integration | shedlock-lettuce | redpulsar | 
 |--------|--------|--------|--------|--------|--------|--------|
-| Total Ops/s | 18.33 | 18.36 | 0.50 | 18.55 | 18.87 | 18.49 | 
-| Avg Ops/s/Client | 3.67 | 3.67 | 0.10 | 3.71 | 3.77 | 3.70 | 
-| Successful Ops | 1,102 | 1,104 | 31 | 1,118 | 1,135 | 1,114 | 
+| Total Ops/s | 18.24 | 18.33 | 0.81 | 19.47 | 18.86 | 21.63 | 
+| Avg Ops/s/Client (95% CI) | 3.65 ± 0.60 | 3.67 ± 1.03 | 0.16 ± 0.06 | 3.89 ± 1.63 | 3.77 ± 0.49 | 4.33 ± 2.48 | 
+| Successful Ops | 1,086 | 1,098 | 51 | 1,113 | 1,129 | 1,111 | 
 | Failed Ops | 0 | 0 | 5 | 0 | 0 | 0 | 
-| Success Rate | 100.00% | 100.00% | 86.11% | 100.00% | 100.00% | 100.00% | 
-| Avg Wait Time | 224.20 ms | 256.57 ms | 239.75 ms | 223.69 ms | 218.28 ms | 378.76 ms | 
+| Success Rate | 100.00% | 100.00% | 91.07% | 100.00% | 100.00% | 100.00% | 
+| Avg Wait Time | 229.12 ms | 251.01 ms | 258.56 ms | 273.45 ms | 216.81 ms | 302.17 ms | 
 | Correctness | PASS | PASS | PASS | PASS | PASS | PASS | 
 
 ## Latency Percentiles (microseconds)
 
 | Percentile | redisson | redlock4j-singlenode | redlock4j-3node | spring-integration | shedlock-lettuce | redpulsar | 
 |------------|--------|--------|--------|--------|--------|--------|
-| p50 | 99,701 | 99,108 | 216,678 | 511 | 437 | 570 | 
-| p75 | 338,708 | 341,942 | 414,533 | 675 | 687 | 778 | 
-| p90 | 649,703 | 758,400 | 617,272 | 846 | 781,306 | 1,180 | 
-| p95 | 885,987 | 1,045,643 | 617,272 | 1,318 | 1,649,013 | 2,432,775 | 
-| p99 | 1,258,035 | 1,692,837 | 617,272 | 8,344,652 | 3,083,844 | 10,604,848 | 
+| p50 | 122,859 | 67,055 | 191,277 | 591 | 491 | 634 | 
+| p75 | 346,087 | 339,311 | 366,379 | 694 | 671 | 803 | 
+| p90 | 610,624 | 745,956 | 715,687 | 833 | 723,733 | 1,225 | 
+| p95 | 828,274 | 1,127,312 | 858,015 | 209,974 | 1,673,087 | 172,153 | 
+| p99 | 1,286,685 | 1,977,457 | 858,015 | 9,980,758 | 3,021,756 | 13,021,778 | 
 | p999 | N/A | N/A | N/A | N/A | N/A | N/A | 
-| max | 1,792,524 | 2,228,022 | 617,272 | 17,979,202 | 4,140,203 | 13,796,471 | 
-| mean | 224,195 | 256,572 | 239,748 | 223,693 | 218,275 | 378,756 | 
+| max | 1,642,704 | 2,746,851 | 858,015 | 15,904,777 | 4,754,299 | 19,156,663 | 
+| mean | 229,120 | 251,005 | 258,557 | 273,445 | 216,807 | 302,166 | 
 
 ## Correctness Validation
 
@@ -44,46 +44,46 @@
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1102
+- **Lock Events Analyzed:** 1636
 
 ### redlock4j-singlenode
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1104
+- **Lock Events Analyzed:** 1647
 
 ### redlock4j-3node
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 31
+- **Lock Events Analyzed:** 300
 
 ### spring-integration
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1118
+- **Lock Events Analyzed:** 1674
 
 ### shedlock-lettuce
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1135
+- **Lock Events Analyzed:** 1697
 
 ### redpulsar
 
 - **Status:** PASSED
 - **Correctness Violations:** 0
 - **FIFO Violations:** 0
-- **Lock Events Analyzed:** 1114
+- **Lock Events Analyzed:** 1670
 
 ## Analysis
 
-**Highest Throughput:** shedlock-lettuce with 18.87 ops/s
+**Highest Throughput:** redpulsar with 21.63 ops/s
 
-**Lowest Latency:** shedlock-lettuce with 218.28 ms average wait time
+**Lowest Latency:** shedlock-lettuce with 216.81 ms average wait time
 
