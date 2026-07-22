@@ -55,7 +55,7 @@ public class PollingWaitStrategy implements LockWaitStrategy {
         this.maxRetryDelay = maxRetryDelay != null ? maxRetryDelay : retryDelay;
         this.retryDelayMultiplier = retryDelayMultiplier;
         this.retryDelayJitterRatio = retryDelayJitterRatio;
-        logger.info("Polling wait strategy initialized with retry delay {}, max {} , multiplier {}, jitter ratio {}",
+        logger.debug("Polling wait strategy initialized with retry delay {}, max {} , multiplier {}, jitter ratio {}",
                 retryDelay, this.maxRetryDelay, retryDelayMultiplier, retryDelayJitterRatio);
     }
 

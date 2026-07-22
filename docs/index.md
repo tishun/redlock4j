@@ -1,4 +1,13 @@
-# Redlock4j
+<p align="center">
+  <img src="logo-large.svg" alt="Redlock4j logo" width="480">
+</p>
+
+[![CI](https://github.com/Codarama/redlock4j/actions/workflows/ci.yml/badge.svg)](https://github.com/Codarama/redlock4j/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Codarama/redlock4j/graph/badge.svg?token=EK4LMLJ533)](https://codecov.io/gh/Codarama/redlock4j)
+[![Maven Central](https://img.shields.io/maven-central/v/org.codarama/redlock4j?versionSuffix=RELEASE)](https://maven-badges.herokuapp.com/maven-central/org.codarama/redlock4j)
+[![Javadocs](https://www.javadoc.io/badge/org.codarama/redlock4j.svg)](https://javadoc.io/doc/org.codarama/redlock4j)
+[![Java](https://img.shields.io/badge/Java-8%2B-blue.svg)](https://openjdk.java.net/)
+[![Guide](https://img.shields.io/badge/mkdocs-guide-526CFE?logo=materialformkdocs&logoColor=white)](https://codarama.github.io/redlock4j/)
 
 A robust Java implementation of the [Redlock distributed locking algorithm](https://redis.io/topics/distlock) for Redis.
 
@@ -20,23 +29,33 @@ Redlock4j provides a reliable distributed locking mechanism using Redis, impleme
 ## Quick Example
 
 ```java
-// Create a Redlock instance
-Redlock redlock = new Redlock(jedisPool1, jedisPool2, jedisPool3);
+import org.codarama.redlock4j.RedlockManager;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-// Acquire a lock
-Lock lock = redlock.lock("my-resource", 10000);
+import java.time.Duration;
+import java.util.concurrent.locks.Lock;
 
-if (lock != null) {
+// Configure the Redis nodes (host/port) and lock behaviour
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1.example.com", 6379)
+    .addRedisNode("redis2.example.com", 6379)
+    .addRedisNode("redis3.example.com", 6379)
+    .defaultLockTimeout(Duration.ofSeconds(30))
+    .retryDelay(Duration.ofMillis(200))
+    .maxRetryAttempts(3)
+    .build();
+
+// RedlockManager is AutoCloseable - use try-with-resources
+try (RedlockManager manager = RedlockManager.withJedis(config)) {
+    Lock lock = manager.createLock("my-resource");
+    lock.lock();
     try {
         // Critical section - your protected code here
         performCriticalOperation();
     } finally {
         // Always unlock in a finally block
-        redlock.unlock(lock);
+        lock.unlock();
     }
-} else {
-    // Failed to acquire lock
-    handleLockFailure();
 }
 ```
 

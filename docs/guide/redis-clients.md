@@ -1,6 +1,11 @@
 # Redis Clients
 
-Redlock4j supports both Jedis and Lettuce Redis clients through a clean driver abstraction.
+Redlock4j supports both Jedis and Lettuce Redis clients through a clean driver
+abstraction. You never construct pools or clients yourself: you describe your
+Redis nodes with `RedisNodeConfiguration` / `RedlockConfiguration`, and pick the
+driver once when you create the manager via `RedlockManager.withJedis(config)`
+or `RedlockManager.withLettuce(config)`. The chosen driver is used for every
+node, and the manager owns the underlying connections.
 
 ## Jedis
 
@@ -19,34 +24,43 @@ Jedis is a synchronous Redis client that's simple and straightforward.
 ### Basic Usage
 
 ```java
-import redis.clients.jedis.JedisPool;
-import org.codarama.redlock4j.Redlock;
+import org.codarama.redlock4j.RedlockManager;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-JedisPool pool1 = new JedisPool("localhost", 6379);
-JedisPool pool2 = new JedisPool("localhost", 6380);
-JedisPool pool3 = new JedisPool("localhost", 6381);
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("localhost", 6379)
+    .addRedisNode("localhost", 6380)
+    .addRedisNode("localhost", 6381)
+    .build();
 
-Redlock redlock = new Redlock(pool1, pool2, pool3);
+RedlockManager manager = RedlockManager.withJedis(config);
 ```
 
-### Connection Pool Configuration
+### Node Configuration
+
+You don't pass a `JedisPool` or pool config object. Instead, tune each node with
+`RedisNodeConfiguration`, which exposes the connection settings Redlock4j needs
+(host, port, optional password and database, and connection/socket timeouts):
 
 ```java
-import redis.clients.jedis.JedisPoolConfig;
+import org.codarama.redlock4j.configuration.RedisNodeConfiguration;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-JedisPoolConfig config = new JedisPoolConfig();
-config.setMaxTotal(128);
-config.setMaxIdle(128);
-config.setMinIdle(16);
-config.setTestOnBorrow(true);
-config.setTestOnReturn(true);
-config.setTestWhileIdle(true);
-config.setMinEvictableIdleTimeMillis(60000);
-config.setTimeBetweenEvictionRunsMillis(30000);
-config.setNumTestsPerEvictionRun(3);
-config.setBlockWhenExhausted(true);
+RedisNodeConfiguration node = RedisNodeConfiguration.builder()
+    .host("localhost")
+    .port(6379)
+    .password("secret")        // optional, default null
+    .database(0)               // optional, default 0
+    .connectionTimeoutMs(2000) // default 2000
+    .socketTimeoutMs(2000)     // default 2000
+    .build();
 
-JedisPool pool = new JedisPool(config, "localhost", 6379, 2000);
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode(node)
+    // ... add the other nodes ...
+    .build();
+
+RedlockManager manager = RedlockManager.withJedis(config);
 ```
 
 ### Advantages
@@ -78,49 +92,46 @@ Lettuce is an advanced Redis client with async and reactive support.
 
 ### Basic Usage
 
+Selecting Lettuce is a one-line change: the node configuration is identical, you
+just create the manager with `withLettuce`:
+
 ```java
-import io.lettuce.core.RedisClient;
-import org.codarama.redlock4j.Redlock;
+import org.codarama.redlock4j.RedlockManager;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-RedisClient client1 = RedisClient.create("redis://localhost:6379");
-RedisClient client2 = RedisClient.create("redis://localhost:6380");
-RedisClient client3 = RedisClient.create("redis://localhost:6381");
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("localhost", 6379)
+    .addRedisNode("localhost", 6380)
+    .addRedisNode("localhost", 6381)
+    .build();
 
-Redlock redlock = new Redlock(client1, client2, client3);
+RedlockManager manager = RedlockManager.withLettuce(config);
 ```
 
-### Advanced Configuration
+### Node Configuration
+
+As with Jedis, you don't build `RedisURI`, `ClientOptions`, or
+`ClientResources` yourself. The same `RedisNodeConfiguration` fields drive the
+Lettuce driver, including per-node timeouts, password, and database selection:
 
 ```java
-import io.lettuce.core.RedisURI;
-import io.lettuce.core.ClientOptions;
-import io.lettuce.core.TimeoutOptions;
-import io.lettuce.core.resource.ClientResources;
-import io.lettuce.core.resource.DefaultClientResources;
-import java.time.Duration;
+import org.codarama.redlock4j.configuration.RedisNodeConfiguration;
+import org.codarama.redlock4j.configuration.RedlockConfiguration;
 
-// Configure client resources
-ClientResources resources = DefaultClientResources.builder()
-    .ioThreadPoolSize(4)
-    .computationThreadPoolSize(4)
+RedisNodeConfiguration node = RedisNodeConfiguration.builder()
+    .host("localhost")
+    .port(6379)
+    .database(0)
+    .connectionTimeoutMs(5000)
+    .socketTimeoutMs(5000)
     .build();
 
-// Configure Redis URI
-RedisURI redisUri = RedisURI.builder()
-    .withHost("localhost")
-    .withPort(6379)
-    .withTimeout(Duration.ofSeconds(5))
-    .withDatabase(0)
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode(node)
+    // ... add the other nodes ...
     .build();
 
-// Configure client options
-ClientOptions options = ClientOptions.builder()
-    .autoReconnect(true)
-    .timeoutOptions(TimeoutOptions.enabled(Duration.ofSeconds(5)))
-    .build();
-
-RedisClient client = RedisClient.create(resources, redisUri);
-client.setOptions(options);
+RedlockManager manager = RedlockManager.withLettuce(config);
 ```
 
 ### Advantages
@@ -152,54 +163,23 @@ client.setOptions(options);
 - You're using Redis Cluster or Sentinel
 - You need advanced features
 
-## Mixed Usage
-
-You can use different clients for different Redis instances:
-
-```java
-// Mix Jedis and Lettuce (not recommended, but possible)
-JedisPool jedisPool = new JedisPool("localhost", 6379);
-RedisClient lettuceClient1 = RedisClient.create("redis://localhost:6380");
-RedisClient lettuceClient2 = RedisClient.create("redis://localhost:6381");
-
-// This works, but stick to one client type for consistency
-Redlock redlock = new Redlock(jedisPool, lettuceClient1, lettuceClient2);
-```
-
-!!! warning "Consistency Recommendation"
-    While mixing clients is technically possible, it's recommended to use the same client type for all Redis instances for consistency and easier maintenance.
-
 ## Connection Management
 
-### Jedis
+The `RedlockManager` owns the connections to every configured node, regardless
+of which driver you selected. You do not open or close pools or clients
+yourself. Because `RedlockManager` implements `AutoCloseable`, closing the
+manager releases all underlying connections:
 
 ```java
-// Always close pools when done
-try {
-    // Use redlock
-} finally {
-    pool1.close();
-    pool2.close();
-    pool3.close();
-}
+try (RedlockManager manager = RedlockManager.withJedis(config)) {
+    // Use the manager and the locks it creates
+} // all connections closed automatically
 ```
 
-### Lettuce
-
-```java
-// Shutdown clients and resources
-try {
-    // Use redlock
-} finally {
-    client1.shutdown();
-    client2.shutdown();
-    client3.shutdown();
-    resources.shutdown();
-}
-```
+If you manage the manager's lifecycle manually, call `manager.close()` when your
+application shuts down.
 
 ## Next Steps
 
 - [Best Practices](best-practices.md) - Follow recommended practices
 - [Configuration](../api/configuration.md) - Detailed configuration options
-

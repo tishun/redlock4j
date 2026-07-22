@@ -14,7 +14,6 @@ import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisPubSub;
 import redis.clients.jedis.Protocol;
 import redis.clients.jedis.RedisClient;
-import redis.clients.jedis.UnifiedJedis;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.params.SetParams;
 import redis.clients.jedis.util.CompareCondition;
@@ -25,8 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import static java.util.Arrays.asList;
-import static redis.clients.jedis.Protocol.Command.CONFIG;
-import static redis.clients.jedis.Protocol.Command.HELLO;
 import static redis.clients.jedis.util.CompareCondition.valueEq;
 
 /**
@@ -104,7 +101,7 @@ public class JedisRedisDriver implements RedisDriver {
 
         // Detect CAS/CAD support once at initialization
         this.cadStrategy = detectCADStrategy();
-        logger.info("Using {} strategy for CAS/CAD operations on {}", cadStrategy, identifier);
+        logger.debug("Using {} strategy for CAS/CAD operations on {}", cadStrategy, identifier);
     }
 
     /**

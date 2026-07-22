@@ -16,12 +16,10 @@ Both libraries implement distributed semaphores to limit concurrent access to re
 
 ```java
 // Create a semaphore with 5 permits
-RedlockSemaphore semaphore = new RedlockSemaphore(
-    "api-limiter", 5, redisDrivers, config
-);
+RedlockSemaphore semaphore = manager.createSemaphore("api-limiter", 5);
 
 // Acquire a permit
-if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
     try {
         // Perform rate-limited operation
         callExternalAPI();
@@ -120,22 +118,20 @@ RedissonSemaphore
 ```java
 private SemaphoreResult attemptAcquire(int permits) {
     List<String> permitIds = new ArrayList<>();
+    Instant startTime = Instant.now();
 
     // 1. For each permit needed
     for (int i = 0; i < permits; i++) {
-        String permitId = generatePermitId();
+        String permitId = generateLockValue();
         String permitKey = semaphoreKey + ":permit:" + permitId;
 
-        // 2. Try to acquire on each Redis node
-        int successfulNodes = 0;
-        for (RedisDriver driver : redisDrivers) {
-            if (driver.setIfNotExists(permitKey, permitId, timeout)) {
-                successfulNodes++;
-            }
-        }
+        // 2. Acquire the permit key on the nodes via the execution strategy
+        //    (fan-out + quorum, same path as a standard lock)
+        LockResult result = executionStrategy.acquireLock(permitKey, permitId,
+                config.getDefaultLockTimeout().toMillis());
 
-        // 3. Check quorum for this permit
-        if (successfulNodes >= config.getQuorum()) {
+        // 3. Check the result for this permit
+        if (result.isAcquired()) {
             permitIds.add(permitId);
         } else {
             // Failed - rollback all permits
@@ -144,11 +140,19 @@ private SemaphoreResult attemptAcquire(int permits) {
         }
     }
 
-    // 4. Check validity time
-    long validityTime = timeout - elapsedTime - driftTime;
+    // 4. Compute validity via the strategy (handles single- vs multi-node drift)
+    Duration elapsed = Duration.between(startTime, Instant.now());
+    long validityTime = executionStrategy.calculateValidityTime(
+            config.getDefaultLockTimeout().toMillis(), elapsed.toMillis());
     boolean acquired = permitIds.size() == permits && validityTime > 0;
 
-
+    if (!acquired) {
+        releasePermits(permitIds);
+        return new SemaphoreResult(false, 0, new ArrayList<>());
+    }
+    return new SemaphoreResult(true, validityTime, permitIds);
+}
+```
 
 ### Redisson
 
@@ -211,10 +215,11 @@ private void releasePermits(List<String> permitIds) {
     for (String permitId : permitIds) {
         String permitKey = semaphoreKey + ":permit:" + permitId;
 
-        // Delete on all nodes
-        for (RedisDriver driver : redisDrivers) {
+        // Delete on the appropriate nodes via the execution strategy
+        executionStrategy.executeOnNodes(driver -> {
             driver.deleteIfValueMatches(permitKey, permitId);
-        }
+            return true;
+        });
     }
 }
 ```
@@ -352,9 +357,7 @@ public RFuture<Integer> availablePermitsAsync() {
 
 ```java
 // Create and use immediately
-RedlockSemaphore semaphore = new RedlockSemaphore(
-    "api-limiter", 5, redisDrivers, config
-);
+RedlockSemaphore semaphore = manager.createSemaphore("api-limiter", 5);
 
 // No need to set permits - maxPermits is just a limit
 semaphore.tryAcquire();
@@ -411,11 +414,11 @@ semaphore.addPermits(3);
 ```java
 private static class PermitState {
     final List<String> permitIds;
-    final long acquisitionTime;
-    final long validityTime; // Calculated validity
+    final Instant acquisitionTime;
+    final Duration validityDuration; // Calculated validity
 
     boolean isValid() {
-        return System.currentTimeMillis() < acquisitionTime + validityTime;
+        return Instant.now().isBefore(acquisitionTime.plus(validityDuration));
     }
 }
 ```
@@ -428,9 +431,11 @@ private static class PermitState {
 
 **Validity Calculation**:
 ```java
-long elapsedTime = System.currentTimeMillis() - startTime;
-long driftTime = (long) (timeout * clockDriftFactor) + 2;
-long validityTime = timeout - elapsedTime - driftTime;
+// Delegated to the execution strategy, which applies clock-drift
+// compensation to the configured lock timeout (a Duration).
+Duration elapsed = Duration.between(startTime, Instant.now());
+long validityTime = executionStrategy.calculateValidityTime(
+        config.getDefaultLockTimeout().toMillis(), elapsed.toMillis());
 ```
 
 ### Redisson
@@ -519,23 +524,35 @@ Release:
 Total: 1 operation
 ```
 
+### Measured Performance
+
+Benchmark: 5 clients, 3 permits, 50 ms work per cycle, 3-node Redis 7 cluster, 60 s measurement (full methodology in [Architecture › Performance Analysis](../guide/architecture.md#performance-analysis)).
+
+| Implementation           |      Ops/s |  p50 (ms) |   p99 (ms) |  mean (ms) |  success |
+|--------------------------|-----------:|----------:|-----------:|-----------:|---------:|
+| Redisson                 |      54.71 |      1.00 |      386.5 |       37.9 |    100 % |
+| **redlock4j-singlenode** |  **91.09** |  **0.73** |   **2.21** |   **0.82** |    100 % |
+| redlock4j-3node          |      87.50 |      1.77 |       4.20 |       1.84 |    100 % |
+
+**Reading the numbers**: redlock4j wins decisively on every metric — **~1.7× Redisson's throughput**, **~175× lower p99**, and **~46× lower mean latency**. Redisson's pub/sub semaphore can stall waiters when the publish round-trips with the release; redlock4j's simpler per-permit `SET NX` approach turns out to be both faster and more predictable in the steady state. The 3-node variant pays only a ~4 % throughput tax for full quorum safety.
+
 ## Safety & Correctness
 
 ### redlock4j
 
 **Safety Guarantees**:
-- ✅ Quorum-based consistency
-- ✅ Survives minority node failures
-- ✅ Clock drift compensation
-- ✅ Automatic permit expiration
-- ✅ No single point of failure
+- Quorum-based consistency
+- Survives minority node failures
+- Clock drift compensation
+- Automatic permit expiration
+- No single point of failure
 
 **Potential Issues**:
-- ⚠️ Higher latency
-- ⚠️ More network overhead
-- ⚠️ `availablePermits()` not accurate
-- ⚠️ No permit counting mechanism
-- ⚠️ Polling-based (no notifications)
+- Higher latency
+- More network overhead
+- `availablePermits()` not accurate
+- No permit counting mechanism
+- Polling-based (no notifications)
 
 **Consistency Model**:
 ```
@@ -548,18 +565,18 @@ Permit acquired if:
 ### Redisson
 
 **Safety Guarantees**:
-- ✅ Atomic operations (Lua scripts)
-- ✅ Accurate permit counting
-- ✅ Efficient pub/sub notifications
-- ✅ Async/reactive support
-- ✅ Low latency
+- Atomic operations (Lua scripts)
+- Accurate permit counting
+- Efficient pub/sub notifications
+- Async/reactive support
+- Low latency
 
 **Potential Issues**:
-- ⚠️ Single point of failure (single instance)
-- ⚠️ No quorum mechanism
-- ⚠️ No automatic permit expiration
-- ⚠️ Permits persist indefinitely
-- ⚠️ Thundering herd on notification
+- Single point of failure (single instance)
+- No quorum mechanism
+- No automatic permit expiration
+- Permits persist indefinitely
+- Thundering herd on notification
 
 **Consistency Model**:
 ```
@@ -583,19 +600,13 @@ Permit acquired if:
 **Example Scenarios**:
 ```java
 // API rate limiting with fault tolerance
-RedlockSemaphore apiLimiter = new RedlockSemaphore(
-    "api:external:rate-limit", 100, redisDrivers, config
-);
+RedlockSemaphore apiLimiter = manager.createSemaphore("api:external:rate-limit", 100);
 
 // Database connection pool with auto-expiration
-RedlockSemaphore dbPool = new RedlockSemaphore(
-    "db:connection:pool", 50, redisDrivers, config
-);
+RedlockSemaphore dbPool = manager.createSemaphore("db:connection:pool", 50);
 
 // Distributed job throttling
-RedlockSemaphore jobThrottle = new RedlockSemaphore(
-    "jobs:concurrent-limit", 10, redisDrivers, config
-);
+RedlockSemaphore jobThrottle = manager.createSemaphore("jobs:concurrent-limit", 10);
 ```
 
 ### Redisson RedissonSemaphore
@@ -630,76 +641,76 @@ RFuture<Boolean> future = asyncLimiter.tryAcquireAsync(5, TimeUnit.SECONDS);
 **Code Complexity**: ~370 lines
 
 **Pros**:
-- ✅ Quorum-based safety
-- ✅ Automatic permit expiration
-- ✅ Fault-tolerant
-- ✅ Clock drift compensation
-- ✅ Thread-local state tracking
+- Quorum-based safety
+- Automatic permit expiration
+- Fault-tolerant
+- Clock drift compensation
+- Thread-local state tracking
 
 **Cons**:
-- ❌ Higher latency
-- ❌ More Redis operations
-- ❌ No accurate permit counting
-- ❌ No permit management operations
-- ❌ Polling-based waiting
+- Higher latency
+- More Redis operations
+- No accurate permit counting
+- No permit management operations
+- Polling-based waiting
 
 ### Redisson
 
 **Code Complexity**: ~600 lines (with async support)
 
 **Pros**:
-- ✅ Low latency
-- ✅ Atomic operations
-- ✅ Accurate permit counting
-- ✅ Pub/sub notifications
-- ✅ Async/reactive support
-- ✅ Rich API (drain, add, set permits)
+- Low latency
+- Atomic operations
+- Accurate permit counting
+- Pub/sub notifications
+- Async/reactive support
+- Rich API (drain, add, set permits)
 
 **Cons**:
-- ❌ Single point of failure
-- ❌ No quorum mechanism
-- ❌ No automatic expiration
-- ❌ Permits persist indefinitely
-- ❌ More complex implementation
+- Single point of failure
+- No quorum mechanism
+- No automatic expiration
+- Permits persist indefinitely
+- More complex implementation
 
 ## Feature Comparison Table
 
-| Feature | redlock4j | Redisson |
-|---------|-----------|----------|
-| **Data Model** | Individual permit keys | Single counter |
-| **Quorum** | Yes (per permit) | No |
-| **Fault Tolerance** | Survives minority failures | Single point of failure |
-| **Permit Expiration** | Automatic (TTL) | Manual (optional) |
-| **Permit Counting** | Not accurate | Accurate (O(1)) |
-| **Waiting Mechanism** | Polling | Pub/sub |
-| **Fairness** | Non-fair | Non-fair |
-| **Async Support** | No | Yes |
-| **Reactive Support** | No | Yes |
-| **Initialization** | Implicit | Explicit |
-| **Permit Management** | Limited | Rich (add/drain/set) |
-| **Performance** | O(N×M) | O(1) |
-| **Latency** | Higher | Lower |
-| **Network Overhead** | High | Low |
-| **Clock Drift** | Compensated | Not applicable |
+| Feature               | redlock4j                  | Redisson                |
+|-----------------------|----------------------------|-------------------------|
+| **Data Model**        | Individual permit keys     | Single counter          |
+| **Quorum**            | Yes (per permit)           | No                      |
+| **Fault Tolerance**   | Survives minority failures | Single point of failure |
+| **Permit Expiration** | Automatic (TTL)            | Manual (optional)       |
+| **Permit Counting**   | Not accurate               | Accurate (O(1))         |
+| **Waiting Mechanism** | Polling                    | Pub/sub                 |
+| **Fairness**          | Non-fair                   | Non-fair                |
+| **Async Support**     | No                         | Yes                     |
+| **Reactive Support**  | No                         | Yes                     |
+| **Initialization**    | Implicit                   | Explicit                |
+| **Permit Management** | Limited                    | Rich (add/drain/set)    |
+| **Performance**       | O(N×M)                     | O(1)                    |
+| **Latency**           | Higher                     | Lower                   |
+| **Network Overhead**  | High                       | Low                     |
+| **Clock Drift**       | Compensated                | Not applicable          |
 
 ## Recommendations
 
 ### Choose redlock4j RedlockSemaphore when:
 
-- ✅ Need quorum-based distributed consistency
-- ✅ Require fault tolerance (multi-master)
-- ✅ Automatic permit expiration is critical
-- ✅ Can tolerate higher latency
-- ✅ Prefer simpler initialization
+- Need quorum-based distributed consistency
+- Require fault tolerance (multi-master)
+- Automatic permit expiration is critical
+- Can tolerate higher latency
+- Prefer simpler initialization
 
 ### Choose Redisson RedissonSemaphore when:
 
-- ✅ Single Redis instance is acceptable
-- ✅ Need high throughput / low latency
-- ✅ Require accurate permit counting
-- ✅ Need async/reactive APIs
-- ✅ Want dynamic permit management
-- ✅ Efficient waiting (pub/sub) is important
+- Single Redis instance is acceptable
+- Need high throughput / low latency
+- Require accurate permit counting
+- Need async/reactive APIs
+- Want dynamic permit management
+- Efficient waiting (pub/sub) is important
 
 ### For Fair Semaphores:
 
@@ -723,10 +734,8 @@ if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
 }
 
 // After (redlock4j)
-RedlockSemaphore semaphore = new RedlockSemaphore(
-    "api-limiter", 5, redisDrivers, config
-);
-if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+RedlockSemaphore semaphore = manager.createSemaphore("api-limiter", 5);
+if (semaphore.tryAcquire(Duration.ofSeconds(5))) {
     try {
         // work
     } finally {
@@ -749,9 +758,7 @@ if (semaphore.tryAcquire(5, TimeUnit.SECONDS)) {
 
 ```java
 // Before (redlock4j)
-RedlockSemaphore semaphore = new RedlockSemaphore(
-    "api-limiter", 5, redisDrivers, config
-);
+RedlockSemaphore semaphore = manager.createSemaphore("api-limiter", 5);
 
 // After (Redisson)
 RSemaphore semaphore = redisson.getSemaphore("api-limiter");
@@ -791,16 +798,4 @@ Choose based on your specific requirements:
 - **Distributed consistency & fault tolerance** → redlock4j RedlockSemaphore
 - **High throughput & low latency** → Redisson RedissonSemaphore
 - **Fair ordering (FIFO)** → Redisson RedissonPermitExpirableSemaphore
-
-**Flow**:
-1. Generate unique permit ID for each permit
-2. For each permit, try `SET NX` on all nodes
-3. Check if quorum achieved for each permit
-4. If any permit fails quorum, rollback all
-5. Validate total acquisition time
-
-**Redis Operations** (for N permits on M nodes):
-- N × M `SET NX` operations
-- Rollback: up to N × M `DELETE` operations
-
 

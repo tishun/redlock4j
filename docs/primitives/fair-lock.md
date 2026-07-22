@@ -4,12 +4,12 @@ Fair locks ensure threads acquire locks in the order they requested them (First-
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Type** | Exclusive Lock with FIFO ordering |
-| **Reentrancy** | Supported (per-thread) |
-| **Interface** | `java.util.concurrent.locks.Lock` |
-| **Data Structure** | Redis Sorted Set (queue) |
+| Property           | Value                             |
+|--------------------|-----------------------------------|
+| **Type**           | Exclusive Lock with FIFO ordering |
+| **Reentrancy**     | Supported (per-thread)            |
+| **Interface**      | `java.util.concurrent.locks.Lock` |
+| **Data Structure** | Redis Sorted Set (queue)          |
 
 ## How It Works
 
@@ -98,27 +98,27 @@ try {
 
 ## Trade-offs
 
-| Aspect | FairLock | Standard Redlock |
-|--------|----------|------------------|
-| **Ordering** | Guaranteed FIFO | Non-deterministic |
-| **Throughput** | Lower | Higher |
-| **Redis Operations** | More (queue mgmt) | Fewer |
-| **Starvation** | Prevented | Possible |
+| Aspect               | FairLock          | Standard Redlock  |
+|----------------------|-------------------|-------------------|
+| **Ordering**         | Guaranteed FIFO   | Non-deterministic |
+| **Throughput**       | Lower             | Higher            |
+| **Redis Operations** | More (queue mgmt) | Fewer             |
+| **Starvation**       | Prevented         | Possible          |
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | Queue maintained on single instance |
-| **Multi-Node (Quorum)** | ✅ | Queue replicated, quorum for lock acquisition |
+| Mode                    | Supported  | Notes                                         |
+|-------------------------|------------|-----------------------------------------------|
+| **Single Node**         | Yes        | Queue maintained on single instance           |
+| **Multi-Node (Quorum)** | Yes        | Queue replicated, quorum for lock acquisition |
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `lockTimeoutMs` | 30000 | Lock TTL in Redis |
-| `queueTimeoutMs` | 60000 | Queue entry TTL |
-| `cleanupIntervalMs` | 5000 | Stale entry cleanup interval |
+| Parameter           | Default  | Description                  |
+|---------------------|----------|------------------------------|
+| `lockTimeoutMs`     | 30000    | Lock TTL in Redis            |
+| `queueTimeoutMs`    | 60000    | Queue entry TTL              |
+| `cleanupIntervalMs` | 5000     | Stale entry cleanup interval |
 
 ## When to Use
 

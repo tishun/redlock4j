@@ -109,7 +109,7 @@ latch.await();  // Blocks until count reaches 0
 System.out.println("All services ready!");
 
 // Or wait with timeout
-if (latch.await(30, TimeUnit.SECONDS)) {
+if (latch.await(Duration.ofSeconds(30))) {
     System.out.println("All services ready!");
 } else {
     System.out.println("Timeout waiting for services");
@@ -118,47 +118,47 @@ if (latch.await(30, TimeUnit.SECONDS)) {
 
 ## Use Cases
 
-| Scenario | Initial Count | Purpose |
-|----------|---------------|---------|
-| Service startup | N services | Wait for all to initialize |
-| Batch processing | N jobs | Wait for all to complete |
-| Test coordination | N threads | Synchronize test execution |
-| Distributed workflow | N stages | Gate between stages |
+| Scenario             | Initial Count | Purpose                    |
+|----------------------|---------------|----------------------------|
+| Service startup      | N services    | Wait for all to initialize |
+| Batch processing     | N jobs        | Wait for all to complete   |
+| Test coordination    | N threads     | Synchronize test execution |
+| Distributed workflow | N stages      | Gate between stages        |
 
 ## Methods
 
-| Method | Description |
-|--------|-------------|
-| `countDown()` | Decrement count by 1 |
-| `await()` | Wait indefinitely for count=0 |
-| `await(long, TimeUnit)` | Wait with timeout |
-| `getCount()` | Current count value |
+| Method            | Description                   |
+|-------------------|-------------------------------|
+| `countDown()`     | Decrement count by 1          |
+| `await()`         | Wait indefinitely for count=0 |
+| `await(Duration)` | Wait with timeout             |
+| `getCount()`      | Current count value           |
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | Count on single instance |
-| **Multi-Node (Quorum)** | ✅ | Count averaged (median) across nodes |
+| Mode                    | Supported  | Notes                                |
+|-------------------------|------------|--------------------------------------|
+| **Single Node**         | Yes        | Count on single instance             |
+| **Multi-Node (Quorum)** | Yes        | Count averaged (median) across nodes |
 
 In multi-node mode, `getCount()` returns the median value across all nodes for consistency.
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `initialCount` | (required) | Starting count value |
-| `latchTimeoutMs` | 300000 | Latch expiration TTL |
-| `useKeyspaceNotifications` | true | Use Pub/Sub vs polling |
+| Parameter                  | Default    | Description            |
+|----------------------------|------------|------------------------|
+| `initialCount`             | (required) | Starting count value   |
+| `latchTimeoutMs`           | 300000     | Latch expiration TTL   |
+| `useKeyspaceNotifications` | true       | Use Pub/Sub vs polling |
 
 ## Comparison with Java CountDownLatch
 
-| Feature | Java CDL | Redlock CDL |
-|---------|----------|-------------|
-| Scope | Single JVM | Distributed |
-| Persistence | Memory | Redis |
-| Failure recovery | Lost on crash | Survives restarts |
-| Network partition | N/A | Quorum-based |
+| Feature           | Java CDL      | Redlock CDL       |
+|-------------------|---------------|-------------------|
+| Scope             | Single JVM    | Distributed       |
+| Persistence       | Memory        | Redis             |
+| Failure recovery  | Lost on crash | Survives restarts |
+| Network partition | N/A           | Quorum-based      |
 
 ## When to Use
 

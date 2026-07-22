@@ -1,17 +1,22 @@
 # Performance Benchmarks
 
-This guide provides comprehensive performance comparisons between **redlock4j** and other Redis-based locking libraries.
+This guide summarizes performance comparisons between **redlock4j** and other Redis-based locking libraries.
+
+!!! note "Authoritative source"
+    The full, authoritative benchmark results live in the [Architecture guide's Performance Analysis section](architecture.md#performance-analysis) and in `redlock4j-benchmark/benchmark-analysis.md` (§7). This page summarizes those results; if the numbers ever diverge, the Architecture guide and `benchmark-analysis.md` win.
 
 ## Test Environment
 
-| Parameter | Value |
-|-----------|-------|
-| Redis Nodes | 3 (Testcontainers) |
-| Redis Version | 7-alpine |
-| Work Simulation | 50ms per lock hold |
-| Lock Timeout | 30s |
-| Benchmark Duration | 1 minute per implementation |
-| JDK | 17 |
+| Parameter          | Value                                           |
+|--------------------|-------------------------------------------------|
+| Redis Nodes        | 3 (Testcontainers)                              |
+| Redis Version      | 7-alpine                                        |
+| Work Simulation    | 50ms per lock hold                              |
+| Lock Timeout       | 30s                                             |
+| Clients            | 5 (10 for ReadWriteLock: 5 readers + 5 writers) |
+| Warmup (discarded) | 30s                                             |
+| Measurement        | 60s (1 minute) per implementation               |
+| JDK                | 17                                              |
 
 ---
 
@@ -23,20 +28,20 @@ redlock4j automatically detects single-node deployments and uses an optimized `S
 - Clock drift compensation  
 - Node iteration overhead
 
-### Distributed Lock Comparison (1 client, no contention)
+### Distributed Lock Comparison (5 clients under contention)
 
-| Implementation | Throughput (ops/s) | Notes |
-|----------------|-------------------|-------|
-| **redlock4j-singlenode** | **18.33** | SingleNodeStrategy optimized |
-| ShedLock | 18.37 | Single node |
-| Spring Integration | 18.23 | Single node |
-| Redisson RLock | 18.32 | Single node |
-| RedPulsar | 18.26 | 3-node Redlock |
-| redlock4j-3node | 17.60 | Full 3-node Redlock |
+| Implementation           | Throughput (ops/s) | Notes                                          |
+|--------------------------|--------------------|------------------------------------------------|
+| RedPulsar                | 21.63              | 3-node Redlock; throughput leader              |
+| Spring Integration       | 19.47              | Single node                                    |
+| ShedLock                 | 18.86              | Single node                                    |
+| **redlock4j-singlenode** | **18.33**          | SingleNodeStrategy optimized                   |
+| Redisson RLock           | 18.24              | Single node                                    |
+| redlock4j-3node          | 0.81               | Full 3-node Redlock (best p99 in field: 858ms) |
 
 **Key Finding**: Single-node mode is **competitive with other single-node implementations** while retaining the ability to scale to multi-node Redlock when needed.
 
-> **Note**: Multi-client contention scenarios with 3-node Redlock show degraded performance due to the inherent cost of distributed consensus. For high-contention workloads, consider single-node mode or tuning retry delays.
+> **Note**: 3-node Redlock shows low throughput on the basic `DistributedLock` primitive because of the **polling wait strategy under contention**, not the cost of consensus per se — waiters sleep on a fixed poll interval and race on release. Exponential backoff (already landed) doubled 3-node throughput; a pub/sub-on-release wait strategy (planned, benchmark-analysis §8 A3) targets the remainder. Despite the throughput gap, 3-node redlock4j has **best-in-class p99** on several primitives (DistributedLock, RWLock writer, MultiLock, Semaphore, CountDownLatch). For high-throughput contention workloads today, prefer single-node mode.
 
 ---
 
@@ -46,29 +51,30 @@ redlock4j automatically detects single-node deployments and uses an optimized `S
 
 The fundamental distributed lock implementation.
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Total Ops/s** | 18.21 | **18.56** | 17.49 |
-| **Avg Wait Time** | 229ms | **218ms** | 265ms |
-| **p50 Latency** | 56.5ms | **0.6ms** | 1.3ms |
-| **p95 Latency** | 923ms | 110ms | 1,775ms |
-| **Correctness** | ✅ PASS | ✅ PASS | ✅ PASS |
+| Metric             | Redisson  | redlock4j-singlenode | redlock4j-3node  |
+|--------------------|-----------|----------------------|------------------|
+| **Total Ops/s**    | 18.24     | **18.33**            | 0.81             |
+| **Mean Wait Time** | 229ms     | 251ms                | 259ms            |
+| **p50 Latency**    | 122.9ms   | **67.1ms**           | 191.3ms          |
+| **p99 Latency**    | 1,286.7ms | 1,977.5ms            | **858.0ms**      |
+| **Correctness**    | PASS      | PASS                 | PASS             |
 
-**Analysis**: redlock4j-singlenode outperforms Redisson by 2% with **94x better p50 latency**.
+**Analysis**: redlock4j-singlenode is at parity with Redisson on throughput (within 1%) and has better p50 latency. redlock4j-3node trades throughput for the **best p99 in the field** (858ms vs Redisson 1,286.7ms); the 3-node throughput gap traces to the polling wait strategy under contention (see note above).
 
 ---
 
 ### 2. FairLock (FIFO Ordering)
 
-Guarantees lock acquisition in request order using Redis sorted sets.
+Guarantees lock acquisition in request order using Redis sorted sets. FairLock uses the polling wait strategy (keyspace notifications degrade FairLock, and exponential backoff also hurts the head-of-queue waiter).
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Total Ops/s** | **18.25** | 17.85 | 16.52 |
-| **Avg Wait Time** | **115ms** | 116ms | 126ms |
-| **FIFO Violations** | 0 | 0 | 0 |
+| Metric              | Redisson    | redlock4j-singlenode | redlock4j-3node  |
+|---------------------|-------------|----------------------|------------------|
+| **Total Ops/s**     | **16.95**   | 11.92                | ~2.95            |
+| **Mean Wait Time**  | **249ms**   | 365ms                | 1,685ms          |
+| **p99 Latency**     | **229.5ms** | 471.1ms              | 2,457.1ms        |
+| **FIFO Violations** | 0           | 0                    | 0                |
 
-**Analysis**: Redisson slightly faster due to Lua script optimization. Both maintain strict FIFO ordering.
+**Analysis**: Redisson leads FairLock (~1.4x faster than single-node redlock4j) thanks to its single-Lua-script head-of-queue path. Switching redlock4j FairLock to polling moved it from ~0 ops/s to ~70% of Redisson's throughput; the per-attempt quorum head-check round-trip on 3 nodes is the remaining bottleneck (planned fix: atomic head-check + acquire). All implementations maintain strict FIFO ordering.
 
 ---
 
@@ -76,27 +82,30 @@ Guarantees lock acquisition in request order using Redis sorted sets.
 
 Acquires multiple resources atomically with deadlock prevention.
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Total Ops/s** | 17.58 | **18.02** | 16.87 |
-| **Avg Wait Time** | **114ms** | 117ms | 124ms |
-| **Correctness** | ✅ PASS | ✅ PASS | ✅ PASS |
+| Metric             | Redisson  | redlock4j-singlenode | redlock4j-3node  |
+|--------------------|-----------|----------------------|------------------|
+| **Total Ops/s**    | 17.05     | 16.97                | **17.72**        |
+| **Mean Wait Time** | 273ms     | 303ms                | **237ms**        |
+| **p99 Latency**    | 1,192ms   | 1,709.5ms            | **1,057.6ms**    |
+| **Correctness**    | PASS      | PASS                 | PASS             |
 
-**Analysis**: redlock4j-singlenode is **2.5% faster** than Redisson.
+**Analysis**: redlock4j-3node (multilock) is the leader on **every axis** — throughput, mean wait, and p99 — after the parallel multi-node I/O change.
 
 ---
 
 ### 4. ReadWriteLock
 
-Allows concurrent readers with exclusive writers.
+Allows concurrent readers with exclusive writers (10 clients: 5 readers + 5 writers).
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Reader Ops/s** | **50.44** | 20.40 | 9.24 |
-| **Writer Ops/s** | 6.09 | **17.81** | 16.65 |
-| **Correctness** | ✅ PASS | ✅ PASS | ✅ PASS |
+| Metric           | Redisson   | redlock4j-singlenode | redlock4j-3node  |
+|------------------|------------|----------------------|------------------|
+| **Reader Ops/s** | **151.65** | 74.66                | 95.41            |
+| **Reader p99**   | **5.82ms** | 340.6ms              | 348.4ms          |
+| **Writer Ops/s** | 0.21       | 15.63                | **16.42**        |
+| **Writer p99**   | 16,820.7ms | 755.6ms              | **104.2ms**      |
+| **Correctness**  | PASS       | PASS                 | PASS             |
 
-**Analysis**: Redisson excels at concurrent reads; redlock4j has **3x better writer throughput**.
+**Analysis**: Redisson leads reader throughput (~1.6x) because it decrements readers in-process via semaphore counting, while redlock4j hits Redis on every read acquire (an architectural choice, not a regression). On the writer side, **Redisson is starved** (0.21 ops/s, ~9.7s mean wait — only a handful of successful writes in 60s), while redlock4j-3node leads with 16.42 ops/s and a best-in-class 104.2ms writer p99.
 
 ---
 
@@ -104,13 +113,14 @@ Allows concurrent readers with exclusive writers.
 
 Limits concurrent access to a resource (configurable permits).
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Total Ops/s** | 54.69 | **108.49** | 103.32 |
-| **Avg Wait Time** | 56.94ms | **0.85ms** | 2.09ms |
-| **Correctness** | ✅ PASS | ✅ PASS | ✅ PASS |
+| Metric             | Redisson  | redlock4j-singlenode | redlock4j-3node  |
+|--------------------|-----------|----------------------|------------------|
+| **Total Ops/s**    | 54.71     | **91.09**            | 87.50            |
+| **Mean Wait Time** | 37.87ms   | **0.83ms**           | 1.84ms           |
+| **p99 Latency**    | 386.5ms   | **2.21ms**           | 4.20ms           |
+| **Correctness**    | PASS      | PASS                 | PASS             |
 
-**Analysis**: redlock4j-singlenode is **2x faster** with **67x lower latency**.
+**Analysis**: redlock4j-singlenode is **~1.7x faster** than Redisson with **~100x lower p99 latency**; the 3-node mode is nearly as fast.
 
 ---
 
@@ -118,13 +128,14 @@ Limits concurrent access to a resource (configurable permits).
 
 Distributed coordination - wait for N events to complete.
 
-| Metric | Redisson | redlock4j-singlenode | redlock4j-3node |
-|--------|----------|---------------------|-----------------|
-| **Latches/s** | 59.66 | 35.59 | **60.97** |
-| **Avg Wait Time** | 16.74ms | **16.32ms** | 16.34ms |
-| **Correctness** | ✅ PASS | ✅ PASS | ✅ PASS |
+| Metric             | Redisson  | redlock4j-singlenode | redlock4j-3node  |
+|--------------------|-----------|----------------------|------------------|
+| **Latches/s**      | 59.02     | 58.19                | **59.91**        |
+| **Mean Wait Time** | 16.91ms   | 15.67ms              | **15.18ms**      |
+| **p99 Latency**    | 22.6ms    | 19.9ms               | **19.9ms**       |
+| **Correctness**    | PASS      | PASS                 | PASS             |
 
-**Analysis**: redlock4j-3node slightly beats Redisson. Coordination primitives benefit from multi-node distribution.
+**Analysis**: All three are within ~3% on throughput; redlock4j-3node has a slight edge on both throughput and p99 latency.
 
 ---
 
@@ -132,38 +143,41 @@ Distributed coordination - wait for N events to complete.
 
 ### Throughput (ops/s) - Higher is Better
 
-| Lock Type | Redisson | redlock4j-singlenode | redlock4j-3node | Winner |
-|-----------|----------|---------------------|-----------------|--------|
-| Distributed Lock | 18.21 | **18.56** | 17.49 | redlock4j |
-| FairLock | **18.25** | 17.85 | 16.52 | Redisson |
-| MultiLock | 17.58 | **18.02** | 16.87 | redlock4j |
-| ReadWriteLock | **56.53** | 38.22 | 25.89 | Redisson |
-| **Semaphore** | 54.69 | **108.49** | 103.32 | **redlock4j** |
-| CountDownLatch | 59.66 | 35.59 | **60.97** | redlock4j |
+| Lock Type              | Redisson   | redlock4j-singlenode | redlock4j-3node  | Winner                  |
+|------------------------|------------|----------------------|------------------|-------------------------|
+| Distributed Lock       | 18.24      | **18.33**            | 0.81             | redlock4j (single-node) |
+| FairLock               | **16.95**  | 11.92                | ~2.95            | Redisson                |
+| MultiLock              | 17.05      | 16.97                | **17.72**        | redlock4j (3-node)      |
+| ReadWriteLock (reader) | **151.65** | 74.66                | 95.41            | Redisson                |
+| ReadWriteLock (writer) | 0.21       | 15.63                | **16.42**        | redlock4j (3-node)      |
+| **Semaphore**          | 54.71      | **91.09**            | 87.50            | **redlock4j**           |
+| CountDownLatch         | 59.02      | 58.19                | **59.91**        | redlock4j (3-node)      |
 
-### Latency (avg ms) - Lower is Better
+### p99 Latency (ms) - Lower is Better
 
-| Lock Type | Redisson | redlock4j-singlenode | redlock4j-3node | Winner |
-|-----------|----------|---------------------|-----------------|--------|
-| Distributed Lock | 229 | **218** | 265 | redlock4j |
-| FairLock | **115** | 116 | 126 | Redisson |
-| MultiLock | **114** | 117 | 124 | Redisson |
-| ReadWriteLock | **110** | 117 | 275 | Redisson |
-| **Semaphore** | 56.94 | **0.85** | 2.09 | **redlock4j** |
-| CountDownLatch | 16.74 | **16.32** | 16.34 | redlock4j |
+| Lock Type              | Redisson  | redlock4j-singlenode | redlock4j-3node  | Winner             |
+|------------------------|-----------|----------------------|------------------|--------------------|
+| Distributed Lock       | 1,286.7   | 1,977.5              | **858.0**        | redlock4j (3-node) |
+| FairLock               | **229.8** | 434.8                | 2,457.1          | Redisson           |
+| MultiLock              | 1,192.2   | 1,709.5              | **1,057.6**      | redlock4j (3-node) |
+| ReadWriteLock (reader) | **5.82**  | 340.6                | 348.4            | Redisson           |
+| ReadWriteLock (writer) | 16,820.7  | 755.6                | **104.2**        | redlock4j (3-node) |
+| **Semaphore**          | 386.5     | **2.21**             | 4.20             | **redlock4j**      |
+| CountDownLatch         | 22.6      | 19.9                 | **19.9**         | redlock4j (3-node) |
 
 ---
 
 ## Key Takeaways
 
-1. **Basic Distributed Lock**: redlock4j matches or beats Redisson
-2. **FairLock**: Redisson has slight edge due to Lua optimization
-3. **MultiLock**: redlock4j competitive, simpler implementation
-4. **ReadWriteLock**: Redisson better for read-heavy, redlock4j better for write-heavy
-5. **Semaphore**: redlock4j is **2x faster** with **67x lower latency**
-6. **CountDownLatch**: redlock4j-3node slightly faster
-7. **3-node overhead**: ~5-10% performance cost for distributed consensus
-8. **Correctness**: All implementations pass with zero violations
+1. **Basic Distributed Lock**: single-node redlock4j is at parity with Redisson on throughput; 3-node has the best p99 in the field but low throughput under contention (polling wait strategy, not consensus cost)
+2. **FairLock**: Redisson has the edge due to its single-Lua-script head-of-queue path
+3. **MultiLock**: redlock4j-3node leads on every axis (throughput and p99)
+4. **ReadWriteLock**: Redisson better for read-heavy; redlock4j far better for write-heavy (Redisson starves writers) and best-in-class writer p99
+5. **Semaphore**: redlock4j is **~1.7x faster** with **~100x lower p99 latency**
+6. **CountDownLatch**: redlock4j-3node slightly faster on throughput and p99
+7. **3-node throughput gap**: on `DistributedLock` and `FairLock` the bottleneck is the polling wait strategy under contention (pub/sub-on-release is the planned fix); other primitives are at or above field-leader performance
+8. **redlock4j leads 4 of 7 categories on throughput and is best-in-class on p99 for 5 of 7**
+9. **Correctness**: All implementations pass with zero violations
 
 ---
 
@@ -205,17 +219,19 @@ mvn exec:java -Dbenchmark.mainClass="org.codarama.redlock4j.benchmark.CountDownL
 
 ### Command Line Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--duration <min>` | Benchmark duration in minutes | 30 |
-| `--clients <n>` | Number of concurrent clients | 10 |
-| `--nodes <n>` | Number of Redis nodes | 3 |
-| `--warmup <sec>` | Warmup duration in seconds | 60 |
-| `--resources <n>` | Resources per MultiLock | 5 |
-| `--writers <n>` | Writer count for RWLock | 2 |
-| `--readers <n>` | Reader count for RWLock | 8 |
-| `--permits <n>` | Semaphore permits | 3 |
-| `--count <n>` | CountDownLatch count | 5 |
+The table below lists the CLI **tool defaults**. Note these differ from the settings used to produce the results on this page: the published numbers were measured with **30s warmup + 60s (1 min) measurement, 5 clients** (10 for ReadWriteLock), matching the Architecture guide's Performance Analysis and `benchmark-analysis.md` §7.
+
+| Option             | Description                            | Tool Default |
+|--------------------|----------------------------------------|--------------|
+| `--duration <min>` | Measurement duration in minutes        | 30           |
+| `--clients <n>`    | Number of concurrent clients           | 10           |
+| `--nodes <n>`      | Number of Redis nodes                  | 3            |
+| `--warmup <sec>`   | Warmup duration in seconds (discarded) | 60           |
+| `--resources <n>`  | Resources per MultiLock                | 5            |
+| `--writers <n>`    | Writer count for RWLock                | 2            |
+| `--readers <n>`    | Reader count for RWLock                | 8            |
+| `--permits <n>`    | Semaphore permits                      | 3            |
+| `--count <n>`      | CountDownLatch count                   | 5            |
 
 ### Quick Benchmark
 

@@ -4,11 +4,11 @@ ReadWriteLock allows multiple concurrent readers OR a single exclusive writer.
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Type** | Shared/Exclusive Lock |
-| **Readers** | Multiple concurrent |
-| **Writers** | Single exclusive |
+| Property      | Value                                      |
+|---------------|--------------------------------------------|
+| **Type**      | Shared/Exclusive Lock                      |
+| **Readers**   | Multiple concurrent                        |
+| **Writers**   | Single exclusive                           |
 | **Interface** | `java.util.concurrent.locks.ReadWriteLock` |
 
 ## How It Works
@@ -115,25 +115,25 @@ try {
 
 ## Concurrency Matrix
 
-| Holder | Read Request | Write Request |
-|--------|--------------|---------------|
-| None | ✓ Granted | ✓ Granted |
-| Reader(s) | ✓ Granted | ✗ Blocked |
-| Writer | ✗ Blocked | ✗ Blocked |
+| Holder    | Read Request  | Write Request  |
+|-----------|---------------|----------------|
+| None      | ✓ Granted     | ✓ Granted      |
+| Reader(s) | ✓ Granted     | ✗ Blocked      |
+| Writer    | ✗ Blocked     | ✗ Blocked      |
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | Reader count on single instance |
-| **Multi-Node (Quorum)** | ✅ | Reader count averaged across nodes |
+| Mode                    | Supported  | Notes                              |
+|-------------------------|------------|------------------------------------|
+| **Single Node**         | Yes        | Reader count on single instance    |
+| **Multi-Node (Quorum)** | Yes        | Reader count averaged across nodes |
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `lockTimeoutMs` | 30000 | Lock TTL |
-| `readerTimeoutMs` | 30000 | Reader counter TTL |
+| Parameter         | Default  | Description        |
+|-------------------|----------|--------------------|
+| `lockTimeoutMs`   | 30000    | Lock TTL           |
+| `readerTimeoutMs` | 30000    | Reader counter TTL |
 
 ## When to Use
 

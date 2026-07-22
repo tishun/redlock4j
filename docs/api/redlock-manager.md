@@ -166,6 +166,30 @@ public AsyncRedlockImpl createAsyncRxLock(String lockKey)
 
 ## Utility Methods
 
+### getConnectedNodeCount()
+
+Returns the number of Redis nodes currently connected.
+
+```java
+public int getConnectedNodeCount()
+```
+
+### getQuorum()
+
+Returns the quorum size required for lock acquisition.
+
+```java
+public int getQuorum()
+```
+
+### getDriverType()
+
+Returns the Redis driver type in use.
+
+```java
+public DriverType getDriverType()
+```
+
 ### isHealthy()
 
 Checks if the manager can reach a quorum of Redis nodes.

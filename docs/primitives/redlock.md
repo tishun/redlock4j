@@ -4,12 +4,12 @@ The standard Redlock implementation provides mutual exclusion across distributed
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Type** | Exclusive Lock |
-| **Reentrancy** | Supported (per-thread) |
-| **Interface** | `java.util.concurrent.locks.Lock` |
-| **Consensus** | Quorum-based (N/2+1) |
+| Property       | Value                             |
+|----------------|-----------------------------------|
+| **Type**       | Exclusive Lock                    |
+| **Reentrancy** | Supported (per-thread)            |
+| **Interface**  | `java.util.concurrent.locks.Lock` |
+| **Consensus**  | Quorum-based (N/2+1)              |
 
 ## How It Works
 
@@ -120,10 +120,10 @@ lock.unlock();    // hold count = 0, released
 
 ## Supported Modes
 
-| Mode | Supported | Notes |
-|------|-----------|-------|
-| **Single Node** | ✅ | Optimized path, no quorum overhead |
-| **Multi-Node (Quorum)** | ✅ | Full Redlock algorithm with N/2+1 consensus |
+| Mode                    | Supported  | Notes                                       |
+|-------------------------|------------|---------------------------------------------|
+| **Single Node**         | Yes        | Optimized path, no quorum overhead          |
+| **Multi-Node (Quorum)** | Yes        | Full Redlock algorithm with N/2+1 consensus |
 
 Mode is auto-selected based on configuration:
 - 1 Redis node → Single Node mode
@@ -131,12 +131,12 @@ Mode is auto-selected based on configuration:
 
 ## Configuration
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `lockTimeoutMs` | 30000 | Lock TTL in Redis |
-| `acquisitionTimeoutMs` | 10000 | Max time to wait for lock |
-| `retryDelayMs` | 100 | Delay between retry attempts |
-| `clockDriftFactor` | 0.01 | Factor for clock drift compensation (multi-node only) |
+| Parameter              | Default  | Description                                           |
+|------------------------|----------|-------------------------------------------------------|
+| `lockTimeoutMs`        | 30000    | Lock TTL in Redis                                     |
+| `acquisitionTimeoutMs` | 10000    | Max time to wait for lock                             |
+| `retryDelayMs`         | 100      | Delay between retry attempts                          |
+| `clockDriftFactor`     | 0.01     | Factor for clock drift compensation (multi-node only) |
 
 ## When to Use
 

@@ -83,7 +83,7 @@ public class KeyspaceWaitStrategy implements LockWaitStrategy {
         // Start background subscription thread for keyspace events
         startKeyspaceSubscription();
 
-        logger.info("Keyspace wait strategy initialized with {} Redis nodes", drivers.size());
+        logger.debug("Keyspace wait strategy initialized with {} Redis nodes", drivers.size());
     }
 
     /**
@@ -160,7 +160,7 @@ public class KeyspaceWaitStrategy implements LockWaitStrategy {
 
                 if (!hasAllFlags(currentConfig, REQUIRED_FLAGS)) {
                     driver.configSet("notify-keyspace-events", mergedConfig);
-                    logger.info("Configured keyspace notifications on {}: {} -> {}", driver.getIdentifier(),
+                    logger.debug("Configured keyspace notifications on {}: {} -> {}", driver.getIdentifier(),
                             currentConfig, mergedConfig);
                 } else {
                     logger.debug("Keyspace notifications already configured on {}: {}", driver.getIdentifier(),

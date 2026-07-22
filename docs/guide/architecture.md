@@ -8,10 +8,10 @@ When a lock is contended (another client holds it), redlock4j needs to wait for 
 
 ### Available Strategies
 
-| Strategy | Description | Default |
-|----------|-------------|:-------:|
-| `KEYSPACE_NOTIFICATIONS` | Uses Redis pub/sub to get instant notification when lock is released |   Yes   |
-| `POLLING` | Polls Redis every 50ms to check if lock is available |   No    |
+| Strategy                 | Description                                                                                       | Default |
+|--------------------------|---------------------------------------------------------------------------------------------------|:-------:|
+| `KEYSPACE_NOTIFICATIONS` | Uses Redis pub/sub to get instant notification when lock is released                              |   Yes   |
+| `POLLING`                | Polls Redis at the configured `retryDelay` interval (default 200ms) to check if lock is available |   No    |
 
 ### Keyspace Notifications (Default)
 
@@ -57,10 +57,10 @@ sequenceDiagram
 
     B->>R: SET NX lock:resource
     R-->>B: nil
-    Note over B: sleep 50ms
+    Note over B: sleep retryDelay<br/>(default 200ms)
     B->>R: SET NX lock:resource
     R-->>B: nil
-    Note over B: sleep 50ms
+    Note over B: sleep retryDelay<br/>(default 200ms)
     A->>R: DEL lock:resource
     B->>R: SET NX lock:resource
     R-->>B: OK
@@ -85,27 +85,27 @@ RedlockConfiguration config = RedlockConfiguration.builder()
 
 The two strategies optimize for different things:
 
-| Metric | Keyspace Notifications | Polling |
-|--------|:---------------------:|:-------:|
-| **Wake-up latency** | ~6ms | ~18-50ms (poll interval) |
+| Metric                          | Keyspace Notifications  |          Polling           |
+|---------------------------------|:-----------------------:|:--------------------------:|
+| **Wake-up latency**             |          ~6ms           |  ~18-50ms (poll interval)  |
 | **Throughput under contention** | Lower (thundering herd) | Higher (staggered retries) |
-| **CPU usage** | Lower (event-driven) | Higher (busy-wait) |
+| **CPU usage**                   |  Lower (event-driven)   |     Higher (busy-wait)     |
 
 **Latency benchmark** (time from lock release to waiter acquiring):
 
-| Strategy | Wake-up Latency | Speedup |
-|----------|:---------------:|:-------:|
-| Keyspace Notifications | 6.78ms | **2.7x faster** |
-| Polling (50ms interval) | 18.02ms | baseline |
+| Strategy                          | Wake-up Latency  |     Speedup     |
+|-----------------------------------|:----------------:|:---------------:|
+| Keyspace Notifications            |      6.78ms      | **2.7x faster** |
+| Polling (50ms benchmark interval) |     18.02ms      |    baseline     |
 
 **Throughput benchmark** (10 waiters, 20ms lock hold):
 
-| Lock Type | Mode | Keyspace (ops/s) | Polling (ops/s) | Notes |
-|-----------|:----:|:----------------:|:---------------:|-------|
-| Distributed Lock | Single | 39.00 | 41.00 | ~Equal (throughput bounded by lock hold time) |
-| ReadWriteLock | Single | 151.80 | 137.10 | Keyspace 10% better (readers benefit) |
-| Semaphore | Single | 400.35 | 402.55 | ~Equal |
-| FairLock | Single | 0.50 | 30.15 | **Polling required** (see note) |
+| Lock Type        |  Mode  | Keyspace (ops/s)  | Polling (ops/s)  | Notes                                         |
+|------------------|:------:|:-----------------:|:----------------:|-----------------------------------------------|
+| Distributed Lock | Single |       39.00       |      41.00       | ~Equal (throughput bounded by lock hold time) |
+| ReadWriteLock    | Single |      151.80       |      137.10      | Keyspace 10% better (readers benefit)         |
+| Semaphore        | Single |      400.35       |      402.55      | ~Equal                                        |
+| FairLock         | Single |       0.50        |      30.15       | **Polling required** (see note)               |
 
 !!! info "Understanding the Results"
     When lock hold times are short (20ms), throughput is bounded by hold time, not wait time. Both strategies achieve similar throughput (~40 ops/s for a single lock with 20ms hold).
@@ -136,12 +136,12 @@ flowchart TB
 
 **The tradeoff:**
 
-| Aspect | Keyspace Notifications | Polling |
-|--------|----------------------|---------|
-| Wakeup behavior | All waiters wake simultaneously | Waiters check independently (staggered) |
-| Wakeup overhead (10 waiters) | 10 wakeups per release | 1 wakeup per release |
-| Latency | ~1-10ms | Up to poll interval |
-| CPU usage | Low (event-driven) | Higher (busy-wait) |
+| Aspect                       | Keyspace Notifications          | Polling                                 |
+|------------------------------|---------------------------------|-----------------------------------------|
+| Wakeup behavior              | All waiters wake simultaneously | Waiters check independently (staggered) |
+| Wakeup overhead (10 waiters) | 10 wakeups per release          | 1 wakeup per release                    |
+| Latency                      | ~1-10ms                         | Up to poll interval                     |
+| CPU usage                    | Low (event-driven)              | Higher (busy-wait)                      |
 
 This design was chosen for **simplicity**, **correctness** (no missed wakeups), and **memory efficiency** (O(keys) not O(keys × waiters)).
 
@@ -155,27 +155,27 @@ This design was chosen for **simplicity**, **correctness** (no missed wakeups), 
 
 Based on comprehensive benchmarks:
 
-| Lock Type | Recommended Strategy | Reason |
-|-----------|---------------------|--------|
-| **FairLock** | **Polling (required)** | Queue management conflicts with keyspace |
-| **Distributed Lock** | Either | Similar throughput; keyspace has lower latency |
-| **ReadWriteLock** | Keyspace | Readers benefit from instant wake-up |
-| **Semaphore** | Either | Similar performance |
+| Lock Type            | Recommended Strategy   | Reason                                         |
+|----------------------|------------------------|------------------------------------------------|
+| **FairLock**         | **Polling (required)** | Queue management conflicts with keyspace       |
+| **Distributed Lock** | Either                 | Similar throughput; keyspace has lower latency |
+| **ReadWriteLock**    | Keyspace               | Readers benefit from instant wake-up           |
+| **Semaphore**        | Either                 | Similar performance                            |
 
 **Choose Keyspace Notifications (default) when:**
 
-- ✅ Wake-up latency matters (~3x faster than polling)
-- ✅ Using ReadWriteLock (readers wake up together instantly)
-- ✅ Lock expiry detection must be instant
-- ✅ Long lock hold times (latency benefit more noticeable)
-- ✅ Low CPU usage is important (event-driven, not busy-wait)
+- Wake-up latency matters (~3x faster than polling)
+- Using ReadWriteLock (readers wake up together instantly)
+- Lock expiry detection must be instant
+- Long lock hold times (latency benefit more noticeable)
+- Low CPU usage is important (event-driven, not busy-wait)
 
 **Choose Polling when:**
 
-- ✅ Using FairLock (required - keyspace has severe issues)
-- ✅ Redis doesn't support keyspace notifications (some managed services)
-- ✅ Network reliability concerns (polling is more resilient)
-- ✅ Consistent retry timing is needed
+- Using FairLock (required - keyspace has severe issues)
+- Redis doesn't support keyspace notifications (some managed services)
+- Network reliability concerns (polling is more resilient)
+- Consistent retry timing is needed
 
 **Decision flowchart:**
 
@@ -360,7 +360,7 @@ sequenceDiagram
     B->>R: SET lock:resource "token-B"
     R-->>B: OK
     A->>R: DEL lock:resource
-    Note over R: ⚠️ DELETES CLIENT B's LOCK!
+    Note over R: DELETES CLIENT B's LOCK!
 ```
 
 **Result**: Client A accidentally deletes Client B's lock!
@@ -378,7 +378,7 @@ sequenceDiagram
     A->>R: DELEX lock:resource IFEQ "token-A"
     Note over R: Lock value is "token-B" ≠ "token-A"
     R-->>A: 0 (not deleted)
-    Note over A: ✅ Client B's lock safe!
+    Note over A: Client B's lock safe!
 ```
 
 ### Implementation Strategies
@@ -387,8 +387,8 @@ redlock4j automatically detects and uses the best available method:
 
 | Redis Version | Strategy   | Command                            |
 |---------------|------------|------------------------------------|
-| 8.0+          | Native     | `DELEX key IFEQ value`             |
-| < 8.0         | Lua Script | `EVAL "if get==expected then del"` |
+| 8.4+          | Native     | `DELEX key IFEQ value`             |
+| < 8.4         | Lua Script | `EVAL "if get==expected then del"` |
 
 ```java
 // Automatic detection at driver initialization
@@ -396,7 +396,7 @@ private CADStrategy detectCADStrategy() {
     try {
         // Try native DELEX command
         redis.dispatch(CommandType.DELEX, testKey, "IFEQ", "test");
-        return CADStrategy.NATIVE;  // Redis 8.0+
+        return CADStrategy.NATIVE;  // Redis 8.4+
     } catch (Exception e) {
         return CADStrategy.SCRIPT;  // Fallback to Lua
     }
@@ -405,7 +405,7 @@ private CADStrategy detectCADStrategy() {
 
 ### Performance Comparison
 
-| Operation               | Native (Redis 8.0+) |   Lua Script    |
+| Operation               | Native (Redis 8.4+) |   Lua Script    |
 |-------------------------|:-------------------:|:---------------:|
 | **Commands**            |          1          |    1 (EVAL)     |
 | **Network round-trips** |          1          |        1        |
@@ -428,7 +428,7 @@ boolean extended = driver.setIfValueMatches(
 );
 ```
 
-**Redis 8.0+ command:**
+**Redis 8.4+ command:**
 ```
 SET lock:resource "token-A" IFEQ "token-A" PX 30000
 ```
@@ -444,12 +444,12 @@ end
 
 ### Why This Matters
 
-| Scenario                        | Without CAS/CAD         | With CAS/CAD          |
-|---------------------------------|-------------------------|-----------------------|
-| Lock expires during operation   | ❌ May delete wrong lock | ✅ Safely fails        |
-| Network partition during unlock | ❌ Unpredictable         | ✅ Atomic check        |
-| Concurrent lock extension       | ❌ Race condition        | ✅ Only owner extends  |
-| Lock ownership verification     | ❌ Separate GET+DEL      | ✅ Single atomic op    |
+| Scenario                        | Without CAS/CAD         | With CAS/CAD       |
+|---------------------------------|-------------------------|--------------------|
+| Lock expires during operation   | May delete wrong lock   | Safely fails       |
+| Network partition during unlock | Unpredictable           | Atomic check       |
+| Concurrent lock extension       | Race condition          | Only owner extends |
+| Lock ownership verification     | Separate GET+DEL        | Single atomic op   |
 
 ### Configuration
 
@@ -458,7 +458,7 @@ CAS/CAD strategy is automatically detected—no configuration needed:
 ```java
 // Driver auto-detects Redis version capabilities
 RedlockManager manager = RedlockManager.withJedis(config);
-// Native commands used if Redis 8.0+ detected
+// Native commands used if Redis 8.4+ detected
 // Lua scripts used otherwise
 ```
 
@@ -476,6 +476,100 @@ DEBUG o.c.r.driver.JedisRedisDriver - Native CAS/CAD not available for redis://l
 
 ---
 
+## Performance Analysis
+
+This section summarizes the optimization work driven by the `redlock4j-benchmark` suite and reports the current cross-primitive standings against Redisson and other Redis-based locking libraries.
+
+### Methodology
+
+All numbers below come from the same harness (`redlock4j-benchmark/`) running against a fresh 3-node Redis 7 Testcontainers cluster, 50 ms simulated work per critical section, 30 s warm-up, 60 s measurement. Lock-acquisition latency is captured per attempt; throughput is aggregated across all clients. Full raw data lives in `redlock4j-benchmark/benchmark-analysis.md` and the per-suite `*-benchmark-results.json` files.
+
+### Key Optimizations
+
+Two architectural changes deliver the bulk of the recent performance improvements:
+
+**1. Parallel multi-node I/O** — `MultiNodeStrategy.acquireLock` / `releaseLock` / `extendLock` previously iterated nodes sequentially. They now fan out via `CompletableFuture` and wait for the quorum on the join. Effect: the per-attempt RTT on a 3-node cluster collapses from `3 × RTT` to `max(RTT)`.
+
+**2. Exponential backoff with jitter** — `PollingWaitStrategy` and the `Redlock.tryLock` fallback path now grow the inter-attempt delay geometrically (configurable multiplier, cap, and jitter ratio). The previous fixed retry (50 ms in the benchmark config) produced retry storms under contention. Backoff reduces wasted RTTs and stabilizes throughput. `FairLock` is intentionally excluded because head-of-queue waiters need tight polling to claim the lock the instant the holder releases.
+
+### p99 vs Throughput
+
+These two metrics measure opposite ends of the same latency distribution and trade off against each other:
+
+- **Throughput (Ops/s)** is system capacity — how many acquire+release cycles complete per second. Driven by RTTs per attempt, inter-attempt delay, and hold time.
+- **p99 latency** is the worst-case experience for 99 % of callers. Driven by contention bursts, retry chains, and any single stuck attempt.
+
+Aggressive polling raises throughput but inflates p99 (more attempts compete for the same release window). Backoff lowers p99 by reducing wasted attempts but can cap throughput when waiters sleep through release windows. Pub/sub-on-release (planned, see `benchmark-analysis.md` §8 A3) is the rare lever that improves both.
+
+Which metric matters depends on the workload:
+
+| Workload                                | Primary metric     |
+|-----------------------------------------|--------------------|
+| Leader election, failover               | **p99 / max**      |
+| API request serialization (per-user)    | **p99**            |
+| Cache-stampede prevention               | **p99 of waiters** |
+| Batch / background jobs                 | **Throughput**     |
+| Rate limiting, semaphores               | **Throughput**     |
+| Critical section on a hot business path | **Both**           |
+
+### Consolidated Results
+
+All measurements taken on the same 3-node Redis cluster. `redlock4j-singlenode` is `redlock4j` in single-node mode (`SingleNodeStrategy`); `redlock4j` (or `redlock4j-3node`) uses full quorum Redlock across all 3 nodes.
+
+#### Throughput (Ops/s — higher is better)
+
+| Primitive               |   Redisson | redlock4j-singlenode | redlock4j-3node | Field leader        |
+|-------------------------|-----------:|---------------------:|----------------:|---------------------|
+| DistributedLock         |      18.24 |            **18.33** |            0.81 | redpulsar (21.63)   |
+| FairLock                |  **16.99** |                12.42 |            2.95 | redisson            |
+| MultiLock               |      17.05 |                16.97 |       **17.72** | **redlock4j-3node** |
+| ReadWriteLock (reader)  | **151.65** |                74.66 |           95.41 | redisson            |
+| ReadWriteLock (writer)  |       0.21 |                15.63 |       **16.42** | **redlock4j-3node** |
+| Semaphore               |      54.71 |            **91.09** |           87.50 | **redlock4j**       |
+| CountDownLatch          |      59.02 |                58.19 |       **59.91** | **redlock4j-3node** |
+
+#### p50 Latency (ms — lower is better)
+
+| Primitive               |  Redisson | redlock4j-singlenode | redlock4j-3node |
+|-------------------------|----------:|---------------------:|----------------:|
+| DistributedLock         |     122.9 |             **67.1** |           191.3 |
+| FairLock                | **221.0** |                332.0 |          1666.0 |
+| MultiLock               |     190.2 |                202.9 |       **171.0** |
+| ReadWriteLock (reader)  |  **0.79** |                12.54 |            2.72 |
+| ReadWriteLock (writer)  |    8649.0 |                 57.8 |        **64.1** |
+| Semaphore               |      1.00 |             **0.73** |            1.77 |
+| CountDownLatch          |      17.2 |                 16.2 |        **15.3** |
+
+#### p99 Latency (ms — lower is better)
+
+| Primitive               |  Redisson | redlock4j-singlenode | redlock4j-3node |
+|-------------------------|----------:|---------------------:|----------------:|
+| DistributedLock         |    1286.7 |               1977.5 |       **858.0** |
+| FairLock                | **229.8** |                434.8 |          2457.1 |
+| MultiLock               |    1192.2 |               1709.5 |      **1057.6** |
+| ReadWriteLock (reader)  |  **5.82** |                340.6 |           348.4 |
+| ReadWriteLock (writer)  |   16820.7 |                755.6 |       **104.2** |
+| Semaphore               |     386.5 |             **2.21** |            4.20 |
+| CountDownLatch          |      22.6 |                 19.9 |        **19.9** |
+
+### Standings Summary
+
+**redlock4j leads on throughput in 4 / 7 categories** (MultiLock, RWLock writer, Semaphore, CountDownLatch — plus single-node DistributedLock parity with the field), and **leads on p99 in 5 / 7** (DistributedLock 3-node, RWLock writer, MultiLock, Semaphore, CountDownLatch).
+
+Remaining gaps under active investigation (`benchmark-analysis.md` §8):
+
+- **DistributedLock 3-node throughput** is the largest residual gap. The 50 ms polling floor is the bottleneck; A3 (pub/sub-on-release wait strategy) targets this directly.
+- **FairLock 3-node throughput** suffers from the per-attempt quorum head-check round-trip. P2-8 (single-shot atomic head-check + acquire) is the structural fix.
+- **RWLock readers** trail Redisson because Redisson decrements readers in-process via semaphore counting while redlock4j hits Redis on every read acquire. This is an architectural choice, not a regression.
+
+### What This Means for Users
+
+- Pick `redlock4j-singlenode` when you have a single Redis instance — you get parity with single-node libraries on most primitives and a clear win on Semaphore.
+- Pick `redlock4j-3node` (full Redlock quorum) when you need fault tolerance across independent Redis masters. Expect lower throughput on the basic `DistributedLock` and `FairLock` primitives until A3 / P2-8 land; everything else (MultiLock, RWLock writers, Semaphore, CountDownLatch) is already at or above field-leader performance.
+- For latency-sensitive paths, the recent backoff change generally improves p99 (best-in-class on 5 / 7 primitives). The exception is `FairLock`, where polling is required for correctness reasons (see *FairLock Recommendation* above).
+
+---
+
 ## Summary
 
 | Decision              | Choice                 | Rationale                                   |
@@ -484,4 +578,6 @@ DEBUG o.c.r.driver.JedisRedisDriver - Native CAS/CAD not available for redis://l
 | Protocol requirement  | RESP3                  | Single connection for commands + pub/sub    |
 | Server configuration  | Auto-configure         | Zero manual setup required                  |
 | Fallback option       | Polling                | For restricted environments                 |
-| CAS/CAD operations    | Auto-detect            | Native commands on Redis 8.0+, Lua fallback |
+| CAS/CAD operations    | Auto-detect            | Native commands on Redis 8.4+, Lua fallback |
+| Multi-node I/O        | Parallel fan-out       | `max(RTT)` per attempt instead of `N × RTT` |
+| Retry backoff         | Exponential + jitter   | Reduces retry storms under contention       |

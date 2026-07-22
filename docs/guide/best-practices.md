@@ -2,6 +2,9 @@
 
 Follow these best practices to use Redlock4j effectively and safely in production.
 
+All examples assume a `RedlockManager manager` created from a
+`RedlockConfiguration`, and locks obtained via `manager.createLock(...)`.
+
 ## Lock Management
 
 ### Always Release Locks
@@ -9,24 +12,27 @@ Follow these best practices to use Redlock4j effectively and safely in productio
 Always release locks in a `finally` block:
 
 ```java
-Lock lock = redlock.lock("resource", 10000);
-if (lock != null) {
-    try {
-        // Critical section
-    } finally {
-        redlock.unlock(lock);  // Always execute
-    }
+Lock lock = manager.createLock("resource");
+lock.lock();
+try {
+    // Critical section
+} finally {
+    lock.unlock();  // Always execute
 }
 ```
 
 ### Check Lock Acquisition
 
-Always check if lock acquisition succeeded:
+When you don't want to block indefinitely, use `tryLock()` and check the result:
 
 ```java
-Lock lock = redlock.lock("resource", 10000);
-if (lock != null) {
-    // Lock acquired successfully
+Lock lock = manager.createLock("resource");
+if (lock.tryLock()) {
+    try {
+        // Lock acquired successfully
+    } finally {
+        lock.unlock();
+    }
 } else {
     // Failed to acquire lock - handle appropriately
     handleLockFailure();
@@ -35,17 +41,27 @@ if (lock != null) {
 
 ### Use Appropriate TTL
 
-Set TTL longer than your operation:
+Set the lock timeout longer than your operation. The lock's time-to-live is the
+`defaultLockTimeout` configured on the manager:
 
 ```java
 // Bad: TTL too short
-Lock lock = redlock.lock("resource", 1000);  // 1 second
-performLongOperation();  // Takes 5 seconds - lock will expire!
+RedlockConfiguration bad = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .defaultLockTimeout(Duration.ofSeconds(1))  // 1 second
+    .build();
+// performLongOperation() takes 5 seconds - lock will expire!
 
 // Good: TTL with safety margin
-Lock lock = redlock.lock("resource", 10000);  // 10 seconds
-performLongOperation();  // Takes 5 seconds - safe
+RedlockConfiguration good = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .defaultLockTimeout(Duration.ofSeconds(10))  // 10 seconds
+    .build();
+// performLongOperation() takes 5 seconds - safe
 ```
+
+If an operation occasionally runs long, extend the lock instead of setting an
+excessively large TTL: `((Redlock) lock).extend(10000)`.
 
 ## Redis Configuration
 
@@ -55,53 +71,73 @@ For production, use truly independent Redis instances:
 
 ```java
 // Good: Independent instances on different servers
-Redlock redlock = new Redlock(
-    new JedisPool("redis1.example.com", 6379),
-    new JedisPool("redis2.example.com", 6379),
-    new JedisPool("redis3.example.com", 6379)
-);
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1.example.com", 6379)
+    .addRedisNode("redis2.example.com", 6379)
+    .addRedisNode("redis3.example.com", 6379)
+    .build();
 
 // Bad: Master-slave replication (not independent)
-// Don't use master and its slaves as separate instances
+// Don't use a master and its slaves as separate nodes
 ```
 
 ### Minimum 3 Instances
 
-Always use at least 3 Redis instances:
+Use at least 3 Redis instances for fault tolerance:
 
 ```java
 // Minimum for fault tolerance
-Redlock redlock = new Redlock(pool1, pool2, pool3);
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .addRedisNode("redis2", 6379)
+    .addRedisNode("redis3", 6379)
+    .build();
 
 // Better: 5 instances for higher availability
-Redlock redlock = new Redlock(pool1, pool2, pool3, pool4, pool5);
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .addRedisNode("redis2", 6379)
+    .addRedisNode("redis3", 6379)
+    .addRedisNode("redis4", 6379)
+    .addRedisNode("redis5", 6379)
+    .build();
 ```
+
+A single node is also valid for local development or non-critical use: with one
+node Redlock4j runs in single-node mode. With three or more nodes it requires a
+quorum.
 
 ### Use Odd Numbers
 
 Always use an odd number of instances:
 
-- ✅ 3, 5, 7 instances
-- ❌ 2, 4, 6 instances
+- 3, 5, 7 instances
+- 2, 4, 6 instances
+
+!!! warning "Exactly 2 nodes is not supported"
+    A configuration with **exactly 2 nodes** throws `IllegalArgumentException`
+    at `build()`. Use **1 node** (single-node mode) or **3 or more** nodes
+    (quorum mode). Two nodes cannot form a meaningful quorum, so it is rejected
+    outright.
 
 ## Error Handling
 
 ### Handle Lock Failures
 
 ```java
-Lock lock = redlock.lock("resource", 10000);
-if (lock == null) {
+Lock lock = manager.createLock("resource");
+if (!lock.tryLock()) {
     // Log the failure
     logger.warn("Failed to acquire lock for resource");
-    
-    // Implement fallback strategy
+
+    // Implement a fallback strategy
     // Option 1: Retry later
     scheduleRetry();
-    
-    // Option 2: Return error to caller
+
+    // Option 2: Return an error to the caller
     throw new LockAcquisitionException("Could not acquire lock");
-    
-    // Option 3: Use alternative approach
+
+    // Option 3: Use an alternative approach
     performAlternativeOperation();
 }
 ```
@@ -109,22 +145,23 @@ if (lock == null) {
 ### Handle Exceptions
 
 ```java
-Lock lock = null;
+Lock lock = manager.createLock("resource");
+boolean acquired = false;
 try {
-    lock = redlock.lock("resource", 10000);
-    if (lock != null) {
+    acquired = lock.tryLock();
+    if (acquired) {
         performCriticalOperation();
     }
 } catch (Exception e) {
     logger.error("Error in critical section", e);
     handleError(e);
 } finally {
-    if (lock != null) {
+    if (acquired) {
         try {
-            redlock.unlock(lock);
+            lock.unlock();
         } catch (Exception e) {
             logger.error("Error releasing lock", e);
-            // Don't throw - we're in finally block
+            // Don't throw - we're in a finally block
         }
     }
 }
@@ -132,46 +169,56 @@ try {
 
 ## Performance
 
-### Reuse Redlock Instances
+### Reuse the RedlockManager
 
-Create Redlock instances once and reuse:
+Create the `RedlockManager` once and reuse it. It owns the Redis connections, so
+creating one per operation is wasteful. Creating individual locks from a shared
+manager is cheap:
 
 ```java
-// Good: Singleton pattern
+// Good: single shared manager
 public class LockService {
-    private static final Redlock REDLOCK = createRedlock();
-    
+    private static final RedlockManager MANAGER = RedlockManager.withJedis(createConfig());
+
     public Lock acquireLock(String resource) {
-        return REDLOCK.lock(resource, 10000);
+        Lock lock = MANAGER.createLock(resource);
+        lock.lock();
+        return lock;
     }
 }
 
-// Bad: Creating new instance each time
+// Bad: creating a new manager each time
 public Lock acquireLock(String resource) {
-    Redlock redlock = new Redlock(pool1, pool2, pool3);  // Wasteful!
-    return redlock.lock(resource, 10000);
+    RedlockManager manager = RedlockManager.withJedis(createConfig());  // Wasteful!
+    Lock lock = manager.createLock(resource);
+    lock.lock();
+    return lock;
 }
 ```
 
-### Configure Connection Pools
+### Tune Node Connections
 
-Properly configure connection pools:
+Connection tuning happens per node via `RedisNodeConfiguration`, not via a pool
+config object:
 
 ```java
-JedisPoolConfig config = new JedisPoolConfig();
-config.setMaxTotal(128);        // Enough for your load
-config.setMaxIdle(64);          // Keep some idle connections
-config.setMinIdle(16);          // Minimum ready connections
-config.setTestOnBorrow(true);   // Validate connections
-config.setTestWhileIdle(true);  // Clean up stale connections
+RedisNodeConfiguration node = RedisNodeConfiguration.builder()
+    .host("redis1")
+    .port(6379)
+    .connectionTimeoutMs(2000)  // time to establish a connection
+    .socketTimeoutMs(2000)      // time to wait on a command
+    .build();
 ```
 
 ### Use Appropriate Retry Settings
 
 ```java
 RedlockConfiguration config = RedlockConfiguration.builder()
-    .retryCount(3)      // Don't retry too many times
-    .retryDelay(200)    // Reasonable delay between retries
+    .addRedisNode("redis1", 6379)
+    .addRedisNode("redis2", 6379)
+    .addRedisNode("redis3", 6379)
+    .maxRetryAttempts(3)                  // Don't retry too many times
+    .retryDelay(Duration.ofMillis(200))   // Reasonable delay between retries
     .build();
 ```
 
@@ -180,24 +227,25 @@ RedlockConfiguration config = RedlockConfiguration.builder()
 ### Use Descriptive Names
 
 ```java
-// Good: Clear and descriptive
-Lock lock = redlock.lock("user:123:profile:update", 10000);
-Lock lock = redlock.lock("order:456:payment:process", 10000);
+// Good: clear and descriptive
+Lock lock = manager.createLock("user:123:profile:update");
+Lock lock = manager.createLock("order:456:payment:process");
 
-// Bad: Unclear names
-Lock lock = redlock.lock("lock1", 10000);
-Lock lock = redlock.lock("temp", 10000);
+// Bad: unclear names
+Lock lock = manager.createLock("lock1");
+Lock lock = manager.createLock("temp");
 ```
 
-### Use Consistent Naming Convention
+### Use a Consistent Naming Convention
 
 ```java
 // Establish a pattern
-String lockKey = String.format("%s:%s:%s", 
+String lockKey = String.format("%s:%s:%s",
     entityType,    // "user", "order", "product"
     entityId,      // "123", "456"
-    operation      // "update", "delete", "process"
-);
+    operation);    // "update", "delete", "process"
+
+Lock lock = manager.createLock(lockKey);
 ```
 
 ## Monitoring and Logging
@@ -205,13 +253,13 @@ String lockKey = String.format("%s:%s:%s",
 ### Log Lock Operations
 
 ```java
-Lock lock = redlock.lock(resourceId, ttl);
-if (lock != null) {
+Lock lock = manager.createLock(resourceId);
+if (lock.tryLock()) {
     logger.info("Acquired lock for resource: {}", resourceId);
     try {
         performOperation();
     } finally {
-        redlock.unlock(lock);
+        lock.unlock();
         logger.info("Released lock for resource: {}", resourceId);
     }
 } else {
@@ -235,68 +283,78 @@ Track important metrics:
 ```java
 @Test
 public void testLockAcquisition() {
-    Lock lock = redlock.lock("test-resource", 10000);
-    assertNotNull(lock, "Should acquire lock");
-    
-    // Try to acquire same lock - should fail
-    Lock lock2 = redlock.tryLock("test-resource", 10000);
-    assertNull(lock2, "Should not acquire already locked resource");
-    
-    redlock.unlock(lock);
+    Lock lock = manager.createLock("test-resource");
+    assertTrue(lock.tryLock(), "Should acquire lock");
+
+    // Try to acquire the same lock from another thread - should fail
+    Lock lock2 = manager.createLock("test-resource");
+    assertFalse(lockFromOtherThread(lock2), "Should not acquire an already locked resource");
+
+    lock.unlock();
 }
 ```
 
 ### Use Testcontainers
 
-For integration tests:
+For integration tests, point node configuration at the container's mapped port:
 
 ```java
 @Testcontainers
 public class RedlockIntegrationTest {
     @Container
-    private static GenericContainer<?> redis = 
+    private static GenericContainer<?> redis =
         new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379);
-    
+
     @Test
     public void testWithRealRedis() {
-        JedisPool pool = new JedisPool(
-            redis.getHost(), 
-            redis.getFirstMappedPort()
-        );
-        Redlock redlock = new Redlock(pool);
-        // Test with real Redis
+        RedlockConfiguration config = RedlockConfiguration.builder()
+            .addRedisNode(redis.getHost(), redis.getFirstMappedPort())
+            .build();
+
+        try (RedlockManager manager = RedlockManager.withJedis(config)) {
+            // Test with real Redis
+        }
     }
 }
 ```
 
 ## Common Pitfalls
 
-### ❌ Don't Forget to Unlock
+### Don't Forget to Unlock
 
 ```java
-// Bad: No unlock
-Lock lock = redlock.lock("resource", 10000);
-performOperation();  // If this throws, lock is never released!
+// Bad: no unlock
+Lock lock = manager.createLock("resource");
+lock.lock();
+performOperation();  // If this throws, the lock is never released!
 ```
 
-### ❌ Don't Use Same Redis Instance Multiple Times
+Always pair `lock()` / successful `tryLock()` with `unlock()` in a `finally`
+block.
+
+### Don't Configure Exactly 2 Nodes
 
 ```java
-// Bad: Same instance counted 3 times
-Redlock redlock = new Redlock(pool, pool, pool);  // Wrong!
+// Bad: exactly 2 nodes throws IllegalArgumentException at build()
+RedlockConfiguration config = RedlockConfiguration.builder()
+    .addRedisNode("redis1", 6379)
+    .addRedisNode("redis2", 6379)
+    .build();  // throws!
 ```
 
-### ❌ Don't Ignore Lock Acquisition Failures
+Use 1 node (single-node mode) or 3+ nodes (quorum mode).
+
+### Don't Ignore Lock Acquisition Failures
 
 ```java
-// Bad: Assuming lock is always acquired
-Lock lock = redlock.lock("resource", 10000);
-performOperation();  // What if lock is null?
+// Bad: assuming the lock is always acquired
+Lock lock = manager.createLock("resource");
+lock.tryLock();          // return value ignored
+performOperation();      // What if the lock wasn't acquired?
 ```
 
 ## Next Steps
 
 - [API Reference](../api/redlock-manager.md) - Detailed API documentation
 - [Advanced Locking](advanced-locking.md) - Advanced features
-
