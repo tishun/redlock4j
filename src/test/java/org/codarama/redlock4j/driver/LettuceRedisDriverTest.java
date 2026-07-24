@@ -544,4 +544,153 @@ public class LettuceRedisDriverTest {
         assertTrue(ex.getMessage().contains("Failed to execute SETEX"));
     }
 
+    // ========== CAS (setIfValueMatches) — NATIVE strategy ==========
+    // With unstubbed dispatch() the CAD detection sees no error and selects NATIVE.
+
+    @Test
+    public void testSetIfValueMatchesNativeSuccess() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.set(eq("test-key"), eq("new-value"), any(SetArgs.class))).thenReturn("OK");
+
+        boolean result = driver.setIfValueMatches("test-key", "new-value", "old-value", 10000);
+
+        assertTrue(result);
+        verify(mockCommands).set(eq("test-key"), eq("new-value"), any(SetArgs.class));
+    }
+
+    @Test
+    public void testSetIfValueMatchesNativeFailure() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.set(eq("test-key"), eq("new-value"), any(SetArgs.class))).thenReturn(null);
+
+        boolean result = driver.setIfValueMatches("test-key", "new-value", "old-value", 10000);
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void testSetIfValueMatchesNativeException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.set(eq("test-key"), eq("new-value"), any(SetArgs.class)))
+                .thenThrow(new RuntimeException("SET IFEQ failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.setIfValueMatches("test-key", "new-value", "old-value", 10000));
+
+        assertTrue(ex.getMessage().contains("Failed to execute SET IFEQ command"));
+    }
+
+    // ========== CAS/CAD — SCRIPT strategy ==========
+    // Forcing CAD detection to fail (dispatch throws) selects the Lua SCRIPT strategy.
+
+    @Test
+    public void testSetIfValueMatchesScriptSuccess() throws RedisDriverException {
+        when(mockCommands.dispatch(any(), any(), any())).thenThrow(new RuntimeException("DELEX unsupported"));
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doReturn("OK").when(mockCommands).eval(anyString(), any(io.lettuce.core.ScriptOutputType.class),
+                any(String[].class), any(String[].class));
+
+        boolean result = driver.setIfValueMatches("test-key", "new-value", "old-value", 10000);
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void testSetIfValueMatchesScriptException() {
+        when(mockCommands.dispatch(any(), any(), any())).thenThrow(new RuntimeException("DELEX unsupported"));
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doThrow(new RuntimeException("EVAL failed")).when(mockCommands).eval(anyString(),
+                any(io.lettuce.core.ScriptOutputType.class), any(String[].class), any(String[].class));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.setIfValueMatches("test-key", "new-value", "old-value", 10000));
+
+        assertTrue(ex.getMessage().contains("Failed to execute SET script"));
+    }
+
+    @Test
+    public void testDeleteIfValueMatchesScriptSuccess() throws RedisDriverException {
+        when(mockCommands.dispatch(any(), any(), any())).thenThrow(new RuntimeException("DELEX unsupported"));
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doReturn(1L).when(mockCommands).eval(anyString(), any(io.lettuce.core.ScriptOutputType.class),
+                any(String[].class), any(String[].class));
+
+        boolean result = driver.deleteIfValueMatches("test-key", "expected-value");
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void testDeleteIfValueMatchesScriptException() {
+        when(mockCommands.dispatch(any(), any(), any())).thenThrow(new RuntimeException("DELEX unsupported"));
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doThrow(new RuntimeException("EVAL failed")).when(mockCommands).eval(anyString(),
+                any(io.lettuce.core.ScriptOutputType.class), any(String[].class), any(String[].class));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.deleteIfValueMatches("test-key", "expected-value"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute delete script"));
+    }
+
+    // ========== decrAndPublishIfZero ==========
+
+    @Test
+    public void testDecrAndPublishIfZeroSuccess() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doReturn(0L).when(mockCommands).eval(anyString(), any(io.lettuce.core.ScriptOutputType.class),
+                any(String[].class), any(String[].class));
+
+        long result = driver.decrAndPublishIfZero("latch", "latch:channel", "zero");
+
+        assertEquals(0L, result);
+    }
+
+    @Test
+    public void testDecrAndPublishIfZeroException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        doThrow(new RuntimeException("EVAL failed")).when(mockCommands).eval(anyString(),
+                any(io.lettuce.core.ScriptOutputType.class), any(String[].class), any(String[].class));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.decrAndPublishIfZero("latch", "latch:channel", "zero"));
+
+        assertTrue(ex.getMessage().contains("Failed to execute DECR_AND_PUBLISH script"));
+    }
+
+    // ========== zRemRangeByScore ==========
+
+    @Test
+    public void testZRemRangeByScoreSuccess() throws RedisDriverException {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zremrangebyscore(eq("zkey"), any(io.lettuce.core.Range.class))).thenReturn(3L);
+
+        long result = driver.zRemRangeByScore("zkey", 0.0, 100.0);
+
+        assertEquals(3L, result);
+    }
+
+    @Test
+    public void testZRemRangeByScoreException() {
+        driver = new LettuceRedisDriver(testConfig, mockRedisClient, mockConnection, mockCommands);
+
+        when(mockCommands.zremrangebyscore(eq("zkey"), any(io.lettuce.core.Range.class)))
+                .thenThrow(new RuntimeException("ZREMRANGEBYSCORE failed"));
+
+        RedisDriverException ex = assertThrows(RedisDriverException.class,
+                () -> driver.zRemRangeByScore("zkey", 0.0, 100.0));
+
+        assertTrue(ex.getMessage().contains("Failed to execute ZREMRANGEBYSCORE"));
+    }
+
 }

@@ -129,6 +129,187 @@ public class FairLockTest {
         assertThrows(UnsupportedOperationException.class, lock::newCondition);
     }
 
+    // ========== Timeout / Unavailable Paths ==========
+
+    @Test
+    void shouldReturnFalseWhenTimeoutExceededAndNeverReachesFront() throws RedisDriverException, InterruptedException {
+        RedlockConfiguration shortConfig = shortRetryConfig();
+
+        // Add to queue succeeds
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        // Someone else is always at the front of the queue
+        when(mockDriver1.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver2.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver3.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+
+        FairLock lock = new FairLock("test-timeout", drivers, shortConfig, null);
+
+        boolean acquired = lock.tryLock(Duration.ofMillis(150));
+
+        assertFalse(acquired);
+        assertFalse(lock.isHeldByCurrentThread());
+        // On the timeout branch the waiter must be removed from the queue for cleanup
+        verify(mockDriver1, atLeastOnce()).zRem(anyString(), anyString());
+    }
+
+    @Test
+    void shouldReturnFalseWhenAtFrontButLockAcquisitionFails() throws RedisDriverException, InterruptedException {
+        RedlockConfiguration shortConfig = shortRetryConfig();
+
+        // Add to queue and become the front-most waiter
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenAnswer(inv -> {
+            String token = inv.getArgument(2);
+            lenient().when(mockDriver1.zRange(anyString(), eq(0L), eq(0L)))
+                    .thenReturn(Collections.singletonList(token));
+            lenient().when(mockDriver2.zRange(anyString(), eq(0L), eq(0L)))
+                    .thenReturn(Collections.singletonList(token));
+            lenient().when(mockDriver3.zRange(anyString(), eq(0L), eq(0L)))
+                    .thenReturn(Collections.singletonList(token));
+            return true;
+        });
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        // We are at the front, but the underlying lock cannot be acquired (quorum not met)
+        lenient().when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        lenient().when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        lenient().when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        FairLock lock = new FairLock("test-acquire-fail", drivers, shortConfig, null);
+
+        boolean acquired = lock.tryLock(Duration.ofMillis(150));
+
+        assertFalse(acquired);
+        assertFalse(lock.isHeldByCurrentThread());
+        verify(mockDriver1, atLeastOnce()).zRem(anyString(), anyString());
+    }
+
+    @Test
+    void shouldReturnFalseForZeroTimeoutWhenUnavailable() throws RedisDriverException {
+        // Add to queue succeeds
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        // Someone else is at the front, so immediate acquisition is impossible
+        when(mockDriver1.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver2.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver3.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+
+        FairLock lock = new FairLock("test-zero-timeout", drivers, testConfig, null);
+
+        boolean acquired = lock.tryLock();
+
+        assertFalse(acquired);
+        assertFalse(lock.isHeldByCurrentThread());
+        verify(mockDriver1, atLeastOnce()).zRem(anyString(), anyString());
+    }
+
+    // ========== lock() / lockInterruptibly() Failure Paths ==========
+
+    @Test
+    void shouldThrowRedlockExceptionWhenLockCannotBeAcquired() throws RedisDriverException {
+        RedlockConfiguration shortConfig = shortAcquisitionConfig();
+
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        when(mockDriver1.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver2.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver3.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+
+        FairLock lock = new FairLock("test-lock-fail", drivers, shortConfig, null);
+
+        assertThrows(RedlockException.class, lock::lock);
+        assertFalse(lock.isHeldByCurrentThread());
+    }
+
+    @Test
+    void shouldThrowRedlockExceptionFromLockInterruptiblyWhenLockCannotBeAcquired() throws RedisDriverException {
+        RedlockConfiguration shortConfig = shortAcquisitionConfig();
+
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        when(mockDriver1.zRange(anyString(), eq(0L), eq(0L))).thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver2.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+        lenient().when(mockDriver3.zRange(anyString(), eq(0L), eq(0L)))
+                .thenReturn(Collections.singletonList("other-token"));
+
+        FairLock lock = new FairLock("test-lock-interruptibly-fail", drivers, shortConfig, null);
+
+        assertThrows(RedlockException.class, lock::lockInterruptibly);
+        assertFalse(lock.isHeldByCurrentThread());
+    }
+
+    // ========== Interruption Paths ==========
+
+    @Test
+    void shouldThrowInterruptedExceptionAndCleanupQueueWhenInterrupted() throws RedisDriverException {
+        // Add to queue succeeds so the acquisition loop is entered
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        FairLock lock = new FairLock("test-interrupt", drivers, testConfig, null);
+
+        // Pre-interrupt the current thread so the loop's interrupt check trips immediately
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(InterruptedException.class, () -> lock.tryLock(Duration.ofSeconds(1)));
+            assertFalse(lock.isHeldByCurrentThread());
+            // The catch/interrupt branch must remove the waiter from the queue
+            verify(mockDriver1, atLeastOnce()).zRem(anyString(), anyString());
+        } finally {
+            // Clear any lingering interrupt status for subsequent tests
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void shouldThrowRedlockExceptionAndPreserveInterruptWhenLockCalledInterrupted() throws RedisDriverException {
+        when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver2.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+        lenient().when(mockDriver3.zAdd(anyString(), anyDouble(), anyString())).thenReturn(true);
+
+        FairLock lock = new FairLock("test-lock-interrupt", drivers, testConfig, null);
+
+        Thread.currentThread().interrupt();
+        try {
+            // lock() catches InterruptedException, re-sets the flag, and wraps it in a RedlockException
+            assertThrows(RedlockException.class, lock::lock);
+            assertTrue(Thread.currentThread().isInterrupted(), "lock() must re-set the interrupt flag");
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    private RedlockConfiguration shortRetryConfig() {
+        return RedlockConfiguration.builder().addRedisNode("localhost", 6379).addRedisNode("localhost", 6380)
+                .addRedisNode("localhost", 6381).defaultLockTimeout(Duration.ofSeconds(30))
+                .retryDelay(Duration.ofMillis(10)).maxRetryAttempts(3).lockAcquisitionTimeout(Duration.ofSeconds(10))
+                .build();
+    }
+
+    private RedlockConfiguration shortAcquisitionConfig() {
+        return RedlockConfiguration.builder().addRedisNode("localhost", 6379).addRedisNode("localhost", 6380)
+                .addRedisNode("localhost", 6381).defaultLockTimeout(Duration.ofSeconds(30))
+                .retryDelay(Duration.ofMillis(10)).maxRetryAttempts(3).lockAcquisitionTimeout(Duration.ofMillis(150))
+                .build();
+    }
+
     private void setupSuccessfulAcquisition() throws RedisDriverException {
         when(mockDriver1.zAdd(anyString(), anyDouble(), anyString())).thenAnswer(inv -> {
             String token = inv.getArgument(2);
