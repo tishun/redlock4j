@@ -108,7 +108,7 @@ public class LettuceRedisDriver implements RedisDriver {
 
         // Detect CAS/CAD support once at initialization
         this.cadStrategy = detectCADStrategy();
-        logger.info("Using {} strategy for CAS/CAD operations on {}", cadStrategy, identifier);
+        logger.debug("Using {} strategy for CAS/CAD operations on {}", cadStrategy, identifier);
     }
 
     /**
