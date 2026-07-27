@@ -194,6 +194,10 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
         @Override
         public void lockInterruptibly() throws InterruptedException {
+            // Honor the Lock.lockInterruptibly() contract: respond to a pending interrupt before doing any work
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
             if (!tryLock(config.getLockAcquisitionTimeout())) {
                 throw new RedlockException("Failed to acquire read lock within timeout");
             }
@@ -420,6 +424,10 @@ public class RedlockReadWriteLock implements ReadWriteLock {
 
         @Override
         public void lockInterruptibly() throws InterruptedException {
+            // Honor the Lock.lockInterruptibly() contract: respond to a pending interrupt before doing any work
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
             // Wait for readers to finish before acquiring write lock
             waitForReadersToFinish();
             underlyingLock.lockInterruptibly();

@@ -144,4 +144,93 @@ public class MultiLockTest {
         MultiLock lock = new MultiLock(Arrays.asList("key1"), drivers, testConfig, null);
         assertThrows(UnsupportedOperationException.class, lock::newCondition);
     }
+
+    // ========== Blocking / Failure Paths ==========
+
+    /**
+     * Builds a configuration with a short acquisition timeout and retry delay so that failure paths complete quickly
+     * without mutating the shared setUp config.
+     */
+    private RedlockConfiguration shortTimeoutConfig() {
+        return RedlockConfiguration.builder().addRedisNode("localhost", 6379).addRedisNode("localhost", 6380)
+                .addRedisNode("localhost", 6381).defaultLockTimeout(Duration.ofSeconds(30))
+                .retryDelay(Duration.ofMillis(10)).maxRetryAttempts(3).lockAcquisitionTimeout(Duration.ofMillis(150))
+                .build();
+    }
+
+    @Test
+    void shouldReturnFalseWhenTryLockWithTimeoutNeverAcquires() throws RedisDriverException, InterruptedException {
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, shortTimeoutConfig(), null);
+
+        assertFalse(lock.tryLock(Duration.ofMillis(150)));
+    }
+
+    @Test
+    void shouldReturnFalseWhenTryLockZeroTimeoutUnavailable() throws RedisDriverException {
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, testConfig, null);
+
+        assertFalse(lock.tryLock());
+    }
+
+    @Test
+    void shouldThrowRedlockExceptionWhenLockFails() throws RedisDriverException {
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, shortTimeoutConfig(), null);
+
+        assertThrows(RedlockException.class, lock::lock);
+    }
+
+    @Test
+    void shouldThrowRedlockExceptionWhenLockInterruptiblyFails() throws RedisDriverException {
+        when(mockDriver1.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver2.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+        when(mockDriver3.setIfNotExists(anyString(), anyString(), anyLong())).thenReturn(false);
+
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, shortTimeoutConfig(), null);
+
+        assertThrows(RedlockException.class, lock::lockInterruptibly);
+    }
+
+    @Test
+    void shouldThrowInterruptedExceptionWhenTryLockPreInterrupted() {
+        // No setIfNotExists stubs: the interrupt check at the top of the retry loop fires before
+        // any acquisition attempt, so the drivers are never invoked.
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, testConfig, null);
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(InterruptedException.class, () -> lock.tryLock(Duration.ofSeconds(1)));
+        } finally {
+            // Clear interrupt status so it does not leak into subsequent tests
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void shouldThrowRedlockExceptionWhenLockPreInterrupted() {
+        // No setIfNotExists stubs: lock() delegates to tryLock which throws InterruptedException at
+        // the top of the retry loop before any acquisition attempt reaches the drivers.
+        MultiLock lock = new MultiLock(Arrays.asList("a", "b"), drivers, testConfig, null);
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(RedlockException.class, lock::lock);
+            // lock() catches InterruptedException and re-sets the interrupt flag before wrapping
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            // Clear interrupt status so it does not leak into subsequent tests
+            Thread.interrupted();
+        }
+    }
 }
